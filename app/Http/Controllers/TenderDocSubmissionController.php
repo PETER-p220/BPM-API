@@ -436,6 +436,26 @@ public function countSubmittedTenders()
     ], 200);
 }
 
+public function countHodSubmittedTenders()
+{
+    try {
+        $count = TenderDocSubmission::where('is_submitted', 'submitted')->count();
+
+        return response()->json([
+            'status' => true,
+            'count' => $count,
+        ], 200);
+    } catch (\Exception $e) {
+        \Log::error('Error counting HOD submitted tenders: ' . $e->getMessage());
+
+        return response()->json([
+            'status' => false,
+            'message' => 'Failed to count submitted tenders.',
+            'error' => $e->getMessage(),
+        ], 500);
+    }
+}
+
 
 
 }

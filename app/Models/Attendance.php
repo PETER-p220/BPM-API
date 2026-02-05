@@ -15,7 +15,7 @@ class Attendance extends Model
 
 
      protected $fillable = [
-          'user_id',
+        'user_id',
         'attenda_id',
         'is_present',
         'if_not_present_and_have_reason',

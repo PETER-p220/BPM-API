@@ -779,5 +779,115 @@ public function usersWithProjectSummary()
             $message->to($user->email)->subject($subject);
         });
     }
+    public function countHodProjects ()
+    {
+        try {
+            $userId = Auth::id();
+            $count = Project::whereHas('contract', function ($query) use ($userId) {
+                $query->where('created_by', $userId);
+            })->count();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Total projects for HOD fetched successfully.',
+                'total_hod_projects' => $count
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Error counting HOD projects: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to count HOD projects.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function hodProjects()
+    {  
+        
+        try {
+            $userId = Auth::id();
+
+            $projects = Project::with([
+                'user:user_id,name',
+                'contract:contract_id,title,time_line_category,start_date,end_date,pdf_file,status,performance_guarantee',
+                'tender:tender_id,tender_type,attachment'
+            ])
+                ->whereHas('contract', function ($query) use ($userId) {
+                    $query->where('created_by', $userId);
+                })
+                ->get([
+                    'project_id',
+                    'project_name',
+                    'tender_id',
+                    'user_id',
+                    'contract_id',
+                    'member_id',
+                    'created_by',
+                    'project_status',
+                    'start_date',
+                    'end_date',
+                    'extended_date',
+                    'follow_up',
+                    'created_at',
+                    'updated_at'
+                ]);
+
+            // Process member_id to fetch user names
+            $projects = $projects->map(function ($project) {
+                if ($project->member_id) {
+                    $memberIds = json_decode($project->member_id, true);
+                    if (is_array($memberIds)) {
+                        $members = User::whereIn('user_id', $memberIds)
+                            ->pluck('name')
+                            ->toArray();
+                        $project->members = $members;
+                    } else {
+                        $project->members = [];
+                    }
+                } else {
+                    $project->members = [];
+                }
+                return $project;
+            });
+
+            return response()->json([
+                'status' => true,
+                'message' => 'HOD projects fetched successfully.',
+                'data' => $projects
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Error fetching HOD projects: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to fetch HOD projects.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    public function hodProjectDetails( Request $request)
+    {
+        try {
+            $userId = Auth::id();
+            $projects = Project::with(['user:user_id,name', 'contract:contract_id,title'])
+                ->whereHas('contract', function ($query) use ($userId) {
+                    $query->where('created_by', $userId);
+                })
+                ->get(['project_id', 'project_name', 'tender_id', 'user_id', 'contract_id', 'member_id', 'created_by', 'project_status', 'follow_up', 'start_date', 'end_date', 'extended_date', 'created_at']);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'HOD project details fetched successfully.',
+                'data' => $projects
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Error fetching HOD project details: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to fetch HOD project details.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
 ?>

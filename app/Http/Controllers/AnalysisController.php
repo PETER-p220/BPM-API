@@ -84,7 +84,12 @@ public function ItemsDropdown(Request $request)
         $analyses = $query->get()->map(function ($analysis) {
             return [
                 'analysis_id' => $analysis->analysis_id,
-                'items' => [$analysis->item_description ?: 'N/A'] // Handle null item_description
+                'items' => [$analysis->item_description ?: 'N/A'], // Handle null item_description
+                'item_description' => $analysis->item_description ?: 'N/A',
+                'quantity' => $analysis->quantity ?: 0,
+                'amount' => $analysis->amount ?: 0,
+                'rate' => $analysis->rate ?: 0,
+                'serial_number' => $analysis->serial_number ?: 'N/A'
             ];
         });
 
@@ -109,14 +114,110 @@ public function ItemsDropdown(Request $request)
     public function store(Request $request)
     {
         try {
+            // Add debug logging before validation
+            Log::info('Request data received', [
+                'has_file' => $request->hasFile('excel_file'),
+                'all_data' => array_keys($request->all())
+            ]);
+
+            // Temporarily remove mime validation to see what we get
             $request->validate([
-                'excel_file' => 'required|file|mimes:xlsx,xls',
+                'excel_file' => 'required|file|max:10240', // Removed mimes validation temporarily
                 'project_id' => 'required|exists:projects,project_id',
+                'tender_id' => 'nullable|exists:tenders,tender_id',
+                'serial_number' => 'nullable|string|max:255',
+                'item_description' => 'nullable|string|max:255',
+                'quoted_quantity' => 'nullable|integer|min:0',
+                'quoted_unit' => 'nullable|string|max:50',
+                'quoted_rate' => 'nullable|numeric|min:0',
+                'quoted_amount' => 'nullable|numeric|min:0',
+                'quantity' => 'nullable|integer|min:0',
+                'rate' => 'nullable|numeric|min:0',
+                'amount' => 'nullable|numeric|min:0',
+                'source' => 'nullable|string|max:255',
+                'urgent_status' => 'nullable|in:urgent,normal,low',
             ]);
     
+            // Debug: Log file information
             $file = $request->file('excel_file');
-            $importer = new AnalysisImport($request->project_id);
-            Excel::import($importer, $file);
+            Log::info('File upload details', [
+                'original_name' => $file->getClientOriginalName(),
+                'mime_type' => $file->getMimeType(),
+                'size' => $file->getSize(),
+                'extension' => $file->getClientOriginalExtension(),
+                'is_valid' => $file->isValid(),
+                'error' => $file->getError(),
+                'tmp_path' => $file->getPathname()
+            ]);
+
+            // Manual mime type check
+            $allowedMimes = [
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+                'application/vnd.ms-excel', // .xls
+                'application/octet-stream', // Some systems send this
+                'text/plain', // Your system is sending this for Excel files
+                'text/csv', // Sometimes Excel files are detected as CSV
+                'application/csv' // Alternative CSV mime type
+            ];
+            
+            // Also check by file extension as fallback
+            $allowedExtensions = ['xlsx', 'xls'];
+            $fileExtension = strtolower($file->getClientOriginalExtension());
+            
+            if (!in_array($file->getMimeType(), $allowedMimes) && !in_array($fileExtension, $allowedExtensions)) {
+                Log::error('Mime type not allowed', [
+                    'mime_type' => $file->getMimeType(),
+                    'extension' => $fileExtension,
+                    'allowed' => $allowedMimes,
+                    'allowed_extensions' => $allowedExtensions
+                ]);
+                return response()->json([
+                    'status' => 400,
+                    'message' => 'File type not allowed. Please upload a valid Excel file (.xlsx or .xls)'
+                ], 400);
+            }
+    
+            // Check if file is actually readable and is a real Excel file
+            if (!$file->isValid()) {
+                Log::error('File validation failed', ['error' => $file->getError()]);
+                return response()->json([
+                    'status' => 400,
+                    'message' => 'File validation failed: ' . $file->getError()
+                ], 400);
+            }
+
+            // Additional validation: Check if file is actually a valid Excel file
+            // Since mime type is text/plain, we need to verify the file structure
+            $fileContent = file_get_contents($file->getPathname());
+            if (strpos($fileContent, '<?xml') === false && strpos($fileContent, 'PK') === false) {
+                Log::error('File is not a valid Excel file', [
+                    'file_starts_with' => substr($fileContent, 0, 50)
+                ]);
+                return response()->json([
+                    'status' => 400,
+                    'message' => 'File is not a valid Excel file. Please upload a proper .xlsx or .xls file.'
+                ], 400);
+            }
+    
+            try {
+                $importer = new AnalysisImport($request->project_id);
+                Excel::import($importer, $file);
+            } catch (\Exception $excelException) {
+                Log::error('Excel import failed', [
+                    'error' => $excelException->getMessage(),
+                    'file_path' => $file->getPathname()
+                ]);
+                
+                // Try to clean up any temporary files
+                if (file_exists($file->getPathname())) {
+                    unlink($file->getPathname());
+                }
+                
+                return response()->json([
+                    'status' => 400,
+                    'message' => 'Failed to read Excel file. Please ensure it is a valid .xlsx or .xls file and not corrupted.'
+                ], 400);
+            }
     
             $rowCount = Analysis::where('project_id', $request->project_id)
                                 ->whereNotNull('serial_number')
@@ -124,6 +225,29 @@ public function ItemsDropdown(Request $request)
     
             if ($rowCount === 0) {
                 throw new \Exception('No meaningful data was imported from the Excel file');
+            }
+            
+            // Update the imported analysis with additional fields if provided
+            if ($rowCount > 0) {
+                $updateData = [];
+                if ($request->tender_id) $updateData['tender_id'] = $request->tender_id;
+                if ($request->serial_number) $updateData['serial_number'] = $request->serial_number;
+                if ($request->item_description) $updateData['item_description'] = $request->item_description;
+                if ($request->quoted_quantity) $updateData['quoted_quantity'] = $request->quoted_quantity;
+                if ($request->quoted_unit) $updateData['quoted_unit'] = $request->quoted_unit;
+                if ($request->quoted_rate) $updateData['quoted_rate'] = $request->quoted_rate;
+                if ($request->quoted_amount) $updateData['quoted_amount'] = $request->quoted_amount;
+                if ($request->quantity) $updateData['quantity'] = $request->quantity;
+                if ($request->rate) $updateData['rate'] = $request->rate;
+                if ($request->amount) $updateData['amount'] = $request->amount;
+                if ($request->source) $updateData['source'] = $request->source;
+                if ($request->urgent_status) $updateData['urgent_status'] = $request->urgent_status;
+                
+                if (!empty($updateData)) {
+                    Analysis::where('project_id', $request->project_id)
+                             ->where('user_id', Auth::id())
+                             ->update($updateData);
+                }
             }
     
             Log::info('Analysis data imported successfully', [
@@ -143,7 +267,7 @@ public function ItemsDropdown(Request $request)
     
             // Notify users with role_id = 1
             $adminUsers = User::where('role_id', 1)
-                              ->where('user_id', '!=', Auth::id()) // Exclude uploader if they’re an admin
+                              ->where('user_id', '!=', Auth::id()) // Exclude uploader if they're an admin
                               ->get();
     
             $adminSubject = "New Analysis Uploaded for Review: {$projectName}";

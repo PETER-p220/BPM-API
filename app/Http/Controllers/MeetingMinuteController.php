@@ -42,56 +42,62 @@ class MeetingMinuteController extends Controller
 
 
 // Store a new meeting minute
-public function store(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'minute_point' => 'required|array', // minute_point as an array
-        'minute_point.*' => 'required|string', // Each point should be a string
-        'user_id' => 'required|exists:users,user_id', // user_id must exist in the users table
-        'department_id' => 'nullable|exists:departments,department_id', // department_id must exist in the departments table
-        'if_more_detail' => 'nullable|string', // Optional additional detail
-        'project_id' => 'required|exists:projects,project_id', // New: project_id must exist in the projects table
-    ]);
-
-    if ($validator->fails()) {
-        return response()->json([
-            'status' => false,
-            'errors' => $validator->errors(),
-        ], 422);
-    }
-
-    try {
-        // If if_more_detail is empty or not provided, set it to NULL
-        $if_more_detail = $request->if_more_detail ?: null;
-
-        // Join minute_point array into a single string
-        $minute_point_string = implode(" | ", $request->minute_point); // Using '|' to separate points
-
-        // Capture the logged-in user ID
-        $capture_logged_user_id = Auth::id();
-
-        // Store the combined minute point into a single row
-        MeetingMinute::create([
-            'user_id' => $request->user_id,
-            'minute_point' => $minute_point_string, // Store all minute points in one string
-            'if_more_detail' => $if_more_detail,    // Store if_more_detail
-            'department_id' => $request->department_id,
-            'project_id' => $request->project_id,   // Store project_id
-            'capture_logged_user_id' => $capture_logged_user_id, // Store logged-in user ID
+    public function store(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'minute_point' => 'required|array', // minute_point as an array
+            'minute_point.*' => 'required|string', // Each point should be a string
+            'user_id' => 'required|exists:users,user_id', // user_id must exist in the users table
+            'department_id' => 'nullable|exists:departments,department_id', // department_id must exist in the departments table
+            'if_more_detail' => 'nullable|string', // Optional additional detail
+            'project_id' => 'required|exists:projects,project_id', // New: project_id must exist in the projects table
         ]);
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Meeting minute(s) created successfully.',
-        ], 201);
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => false,
-            'message' => 'Failed to create meeting minute.',
-            'error' => $e->getMessage(),
-        ], 500);
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            // If if_more_detail is empty or not provided, set it to null
+            $if_more_detail = $request->if_more_detail;
+            if ($if_more_detail === null || $if_more_detail === '') {
+                $if_more_detail = null;
+            } else {
+                $if_more_detail = json_encode([$if_more_detail]); // Encode as JSON array to match migration
+            }
+
+            // Join minute_point array into a single string
+            $minute_point_string = implode(" | ", $request->minute_point); // Using '|' to separate points
+
+            // Capture the logged-in user ID
+            $capture_logged_user_id = Auth::id();
+
+            // Store the combined minute point into a single row
+            MeetingMinute::create([
+                'user_id' => $request->user_id,
+                'minute_point' => $minute_point_string, // Store all minute points in one string
+                'if_more_detail' => $if_more_detail,    // Store if_more_detail
+                'department_id' => $request->department_id,
+                'project_id' => $request->project_id,   // Store project_id
+                'capture_logged_user_id' => $capture_logged_user_id, // Store logged-in user ID
+            ]);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Meeting minute(s) created successfully.',
+            ], 201);
+        } catch (\Exception $e) {
+            Log::error('Failed to create meeting minute: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to create meeting minute.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
-}
 
     
 

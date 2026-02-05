@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
+use App\Models\AssignTender;
 use App\Models\Tender;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
@@ -372,6 +373,52 @@ class TenderController extends Controller
                 'status' => false,
                 'message' => 'An error occurred while fetching tender types.',
                 'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function countHodTenders()
+    {
+        try {
+            $count = AssignTender::count();
+
+            return response()->json([
+                'status' => true,
+                'count' => $count,
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Error counting HOD assigned tenders: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to count HOD assigned tenders.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function hodTenders(Request $request)
+    {
+        try {
+            $data = AssignTender::with([
+                'tender:tender_id,title,tender_type,procurement_entity,tender_number,attachment,date_of_Publication,bid_submission,expired_at',
+                'user:user_id,name'
+            ])
+                ->orderBy('assign_id', 'desc')
+                ->get();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Assigned tenders fetched successfully.',
+                'data' => $data,
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Error fetching HOD assigned tenders: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to fetch assigned tenders.',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

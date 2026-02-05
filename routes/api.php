@@ -64,9 +64,8 @@ Route::middleware(['auth:sanctum', 'token.expiration'])->group(function () {
     Route::get('/user/withrole', [AuthController::class, 'getUsersWithRoles']);
     Route::post('/update-profile', [AuthController::class, 'updateProfile']);
     Route::get('/count/users', [AuthController::class, 'countUsers']);
-
     
-Route::get('/count/requests', [RequestController::class, 'countRequests']);
+Route::get('/count/requests', [RequestForProjectController::class, 'countRequests']);
 Route::get('/count/user/requests/approved', [RequestForProjectController::class, 'countApprovedRequests']);
 Route::get('/count/user/requests/rejected', [RequestForProjectController::class, 'countRejectedRequests']);
 Route::get('/count/total-receipts', [ReceiptController::class, 'countTotalReceipts']);
@@ -93,7 +92,6 @@ Route::get('/admin-dropdown', [AuthController::class, 'AdminDropDown']);
     Route::get('/count/roles', [RoleController::class, 'countRoles']);
 
 
-
 //department Route
 Route::apiResource('/departments', DepartmentController::class);
 Route::get('/dropdown/department', [DepartmentController::class, 'departmentByDropDown']);
@@ -107,6 +105,7 @@ Route::get('/count/registered-tenders', [TenderController::class, 'countTenders'
 Route::get('/reportTenders', [TenderController::class, 'getTenderReport']);
 Route::get('/types/tenders', [TenderController::class, 'getAllTenderTypes']);
 
+
 //assign tender route
 Route::apiResource('/assign/tender', AssignTenderController::class);
  Route::get('/your/tender', [AssignTenderController::class, 'yourTender']);
@@ -117,6 +116,7 @@ Route::get('/count/all-assigned/tenders', [AssignTenderController::class, 'count
 Route::get('/count/on-progress/tender', [AssignTenderController::class, 'countOnProgressTenders']);
 Route::get('/count/expire-tenders', [AssignTenderController::class, 'countExipredTenders']);
 Route::get('/count/deadline-reached/tenders', [AssignTenderController::class, 'countDealineReachedTenders']);
+
 
 Route::get('/count/all/on-progress-tenders', [AssignTenderController::class, 'countAllOnProgressTenders']);
 Route::get('/count/all/deadline-reached-tenders', [AssignTenderController::class, 'countAllDeadlineReachedTenders']);
@@ -129,6 +129,10 @@ Route::get('/count/tenders-submissions', [TenderDocSubmissionController::class, 
 Route::get('/submittedtenders-reports', [TenderDocSubmissionController::class, 'getSubmittedTenderReport']);
 Route::get('/tender/types/for-submittedtenders', [TenderDocSubmissionController::class, 'getAllTenderTypesForSubmittedOnes']);
 Route::get('/count/submitted/tender', [TenderDocSubmissionController::class, 'countSubmittedTenders']);
+
+//awarded tenders
+Route::get('/awarded-tender', [AwardedTenderController::class, 'index']);
+Route::get('/count/awarded-tenders', [AwardedTenderController::class, 'countAwardedTenders']);
 
 
 //projects Routes
@@ -158,6 +162,9 @@ Route::resource('request-for-purchase', RequestForPurchaseController::class);
 Route::get('/logged-user/requests', [RequestForPurchaseController::class, 'LoggedUserRequests']);
 Route::post('/requests/update', [RequestForPurchaseController::class, 'update']);
 
+//request for projects
+Route::resource('requests-for-projects', RequestForProjectController::class);
+
 //extend request 
 Route::resource('extend-request', ExtendRequestController::class);
 Route::get('/loggedUserExtentions', [ExtendRequestController::class, 'loggedUserExtentions']);
@@ -183,6 +190,28 @@ Route::get('/count/user-projects/budget', [ProjectController::class, 'countUserT
 
 // Route for fetching all projects for a specific user by user_id
 Route::get('/users-with-project-summary', [ProjectController::class, 'usersWithProjectSummary']);
+
+
+//Hod routes
+Route::get('/hod/projects', [ProjectController::class, 'hodProjects']);
+Route::get('/hod/project/{project_id}', [ProjectController::class, 'hodProjectDetails']);
+Route::post('/hod/project/update', [ProjectController::class, 'update']);
+Route::post('/hod/project/approve', [ProjectController::class, 'approveProject']);
+Route::post('/hod/project/reject', [ProjectController::class, 'rejectProject']);
+Route::get('/hod/project/activities', [ProjectActivitiesController::class, 'index']);
+Route::get('/hod/project/analysis', [ProjectAnalysisController::class, 'index']);
+Route::get('/hod/project/analysis/approved/count', [ProjectAnalysisController::class, 'countApprovedProjectAnalyses']);
+Route::get('/hod/project/analysis/total-amount-required', [ProjectAnalysisController::class, 'countTotalAmountRequiredForProject']);
+Route::get('/hod/project/analysis/total-amount-required/approved', [ProjectAnalysisController::class, 'countTotalAmountRequiredForApprovedProjectAnalyses']);
+Route::get('/hod/project/analysis/total-amount-required/rejected', [ProjectAnalysisController::class, 'countTotalAmountRequiredForRejectedProjectAnalyses']);
+Route::get('count/hod-tenders', [TenderController::class, 'countHodTenders']);
+Route::get('count/hod-requests', [RequestForProjectController::class, 'countHodRequests']);
+Route::get('count/hod-submitted-tenders', [TenderDocSubmissionController::class, 'countHodSubmittedTenders']);
+Route::get('/hod/tenders', [TenderController::class, 'hodTenders']);
+Route::get('/hod/tender/{tender_id}', [TenderController::class, 'hodTenderDetails']);
+Route::post('/hod/tender/update', [TenderController::class, 'update']);
+Route::post('/hod/tender/approve', [TenderController::class, 'approveTender']);
+Route::post('/hod/tender/reject', [TenderController::class, 'rejectTender']);
 
 
 

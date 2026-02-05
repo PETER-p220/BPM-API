@@ -506,6 +506,35 @@ public function countUserRequests()
     }
 }
 
+public function countHodRequests()
+{
+    try {
+        $userId = Auth::id();
+
+        if (!$userId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Authentication required.',
+            ], 401);
+        }
+
+        $count = RequestForProject::where('user_id', $userId)->count();
+
+        return response()->json([
+            'status' => true,
+            'count' => $count,
+        ], 200);
+    } catch (\Exception $e) {
+        Log::error('Error counting HOD requests: ' . $e->getMessage());
+
+        return response()->json([
+            'status' => false,
+            'message' => 'Failed to count HOD requests.',
+            'error' => $e->getMessage(),
+        ], 500);
+    }
+}
+
 // Count approved requests for the logged-in user
 public function countApprovedRequests()
 {

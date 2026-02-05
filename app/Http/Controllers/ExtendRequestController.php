@@ -96,14 +96,17 @@ class ExtendRequestController extends Controller
                 'errors' => $validator->errors()
             ], 400);
         }
-
-        $response = [
-            'extend_request' => ['status' => false, 'message' => '', 'data' => null],
-            'email' => ['status' => false, 'message' => '', 'details' => []],
-        ];
-
         try {
             $analysis = Analysis::findOrFail($request->analysis_id);
+
+            // Check if analysis has quantity and amount values
+            if ($analysis->quantity === null || $analysis->quantity === '') {
+                throw new Exception("Analysis record has no quantity value available. Please ensure the analysis has been properly set up with quantity and amount.");
+            }
+            
+            if ($analysis->amount === null || $analysis->amount === '') {
+                throw new Exception("Analysis record has no amount value available. Please ensure the analysis has been properly set up with quantity and amount.");
+            }
 
             // Create the extend request
             $extendRequest = ExtendRequest::create([
@@ -129,71 +132,16 @@ class ExtendRequestController extends Controller
                 'amount' => $newAmount,
             ]);
 
-            $response['extend_request'] = [
+            return response()->json([
                 'status' => true,
                 'message' => 'Extend request created successfully.',
-                'data' => [
-                    'request' => $extendRequest->load(['project', 'analysis', 'user']),
-                    'current_quantity' => $newQuantity,
-                    'quantity_extended' => $request->quantity_extended,
-                    'current_amount' => $newAmount,
-                    'amount_extended' => $request->amount_extended,
-                ],
-            ];
-
-            // Notify creator and admin
-            $loggedInUser = Auth::user();
-            $admin = User::where('role_id', 1)->first();
-            $emailResults = [];
-
-            // Notify the creator
-            $emailResultCreator = $this->sendCreatorNotification($loggedInUser, $extendRequest, $newQuantity, $newAmount);
-            $emailResults[] = [
-                'email' => $loggedInUser->email,
-                'status' => $emailResultCreator['status'],
-                'message' => $emailResultCreator['message'],
-            ];
-
-            // Notify the admin
-            if ($admin && $admin->user_id !== Auth::id()) {
-                $emailResultAdmin = $this->sendAdminNotification($admin, $extendRequest, $loggedInUser->name);
-                $emailResults[] = [
-                    'email' => $admin->email,
-                    'status' => $emailResultAdmin['status'],
-                    'message' => $emailResultAdmin['message'],
-                ];
-            } else if (!$admin) {
-                $emailResults[] = [
-                    'email' => null,
-                    'status' => false,
-                    'message' => 'No admin with role_id = 1 found.',
-                ];
-            }
-
-            $allEmailsSent = !in_array(false, array_column($emailResults, 'status'));
-            $response['email'] = [
-                'status' => $allEmailsSent,
-                'message' => $allEmailsSent ? 'All notifications sent successfully.' : 'Some notifications failed.',
-                'details' => $emailResults,
-            ];
-
-            return response()->json([
-                'status' => $response['extend_request']['status'],
-                'message' => 'Extend request creation and email notifications processed.',
-                'results' => $response
-            ], $response['extend_request']['status'] ? 201 : 500);
+                'data' => $extendRequest->load(['project', 'analysis', 'user'])
+            ], 201);
 
         } catch (Exception $e) {
-            $response['extend_request'] = [
-                'status' => false,
-                'message' => 'Failed to create extend request.',
-                'error' => $e->getMessage()
-            ];
-
             return response()->json([
                 'status' => false,
-                'message' => 'Extend request creation failed.',
-                'results' => $response
+                'message' => 'Failed to create extend request: ' . $e->getMessage()
             ], 500);
         }
     }
