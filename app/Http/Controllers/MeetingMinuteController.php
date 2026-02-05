@@ -22,8 +22,7 @@ class MeetingMinuteController extends Controller
             $meetingMinutes = MeetingMinute::with([
                 'user:user_id,name',          // Associated user data
                 'department:department_id,name', // Associated department data,
-                'project:project_id,project_name',
-                'loggedUser:capture_logged_user_id,name'
+                'project:project_id,project_name'
             ])->orderBy('minutes_id', 'desc')->get();
 
             return response()->json([
@@ -39,78 +38,131 @@ class MeetingMinuteController extends Controller
         }
     }
 
-
-
-// Store a new meeting minute
+    // Store a new meeting minute
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'minute_point' => 'required|array', // minute_point as an array
-            'minute_point.*' => 'required|string', // Each point should be a string
-            'user_id' => 'required|exists:users,user_id', // user_id must exist in the users table
-            'department_id' => 'nullable|exists:departments,department_id', // department_id must exist in the departments table
-            'if_more_detail' => 'nullable|string', // Optional additional detail
-            'project_id' => 'required|exists:projects,project_id', // New: project_id must exist in the projects table
-        ]);
+        // Check if this is HR meeting minutes (with meeting details) or accountant minutes
+        $isHrMinutes = $request->has('meeting_date') || $request->has('meeting_title');
 
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => false,
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
-        try {
-            // If if_more_detail is empty or not provided, set it to null
-            $if_more_detail = $request->if_more_detail;
-            if ($if_more_detail === null || $if_more_detail === '') {
-                $if_more_detail = null;
-            } else {
-                $if_more_detail = json_encode([$if_more_detail]); // Encode as JSON array to match migration
-            }
-
-            // Join minute_point array into a single string
-            $minute_point_string = implode(" | ", $request->minute_point); // Using '|' to separate points
-
-            // Capture the logged-in user ID
-            $capture_logged_user_id = Auth::id();
-
-            // Store the combined minute point into a single row
-            MeetingMinute::create([
-                'user_id' => $request->user_id,
-                'minute_point' => $minute_point_string, // Store all minute points in one string
-                'if_more_detail' => $if_more_detail,    // Store if_more_detail
-                'department_id' => $request->department_id,
-                'project_id' => $request->project_id,   // Store project_id
-                'capture_logged_user_id' => $capture_logged_user_id, // Store logged-in user ID
+        if ($isHrMinutes) {
+            // HR meeting minutes validation
+            $validator = Validator::make($request->all(), [
+                'meeting_date' => 'required|date',
+                'meeting_title' => 'required|string',
+                'attendees' => 'required|string',
+                'agenda' => 'required|string',
+                'discussion' => 'nullable|string',
+                'decisions' => 'nullable|string',
+                'next_meeting' => 'nullable|string',
+                'department_id' => 'nullable|exists:departments,department_id',
+                'project_id' => 'nullable|exists:projects,project_id',
             ]);
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Meeting minute(s) created successfully.',
-            ], 201);
-        } catch (\Exception $e) {
-            Log::error('Failed to create meeting minute: ' . $e->getMessage());
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to create meeting minute.',
-                'error' => $e->getMessage(),
-            ], 500);
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
+
+            try {
+                // Store HR meeting minutes
+                MeetingMinute::create([
+                    'user_id' => Auth::id(),
+                    'meeting_title' => $request->meeting_title,
+                    'meeting_date' => $request->meeting_date,
+                    'attendees' => $request->attendees,
+                    'agenda' => $request->agenda,
+                    'discussion' => $request->discussion,
+                    'decisions' => $request->decisions,
+                    'next_meeting' => $request->next_meeting,
+                    'department_id' => $request->department_id,
+                    'project_id' => $request->project_id,
+                    'capture_logged_user_id' => Auth::id(),
+                    // Accountant fields set to null for HR minutes
+                    'minute_point' => null,
+                    'if_more_detail' => null,
+                ]);
+
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Meeting minutes created successfully.',
+                ], 201);
+            } catch (\Exception $e) {
+                Log::error('Failed to create meeting minute: ' . $e->getMessage());
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Failed to create meeting minute.',
+                    'error' => $e->getMessage(),
+                ], 500);
+            }
+        } else {
+            // Accountant meeting minutes validation (original logic)
+            $validator = Validator::make($request->all(), [
+                'minute_point' => 'required|array', // minute_point as an array
+                'minute_point.*' => 'required|string', // Each point should be a string
+                'user_id' => 'required|exists:users,user_id', // user_id must exist in the users table
+                'department_id' => 'nullable|exists:departments,department_id', // department_id must exist in the departments table
+                'if_more_detail' => 'nullable|string', // Optional additional detail
+                'project_id' => 'required|exists:projects,project_id', // New: project_id must exist in the projects table
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
+
+            try {
+                // If if_more_detail is empty or not provided, set it to null
+                $if_more_detail = $request->if_more_detail;
+                if ($if_more_detail === null || $if_more_detail === '') {
+                    $if_more_detail = null;
+                } else {
+                    $if_more_detail = json_encode([$if_more_detail]); // Encode as JSON array to match migration
+                }
+
+                // Join minute_point array into a single string
+                $minute_point_string = implode(" | ", $request->minute_point); // Using '|' to separate points
+
+                // Capture the logged-in user ID
+                $capture_logged_user_id = Auth::id();
+
+                // Store the combined minute point into a single row
+                MeetingMinute::create([
+                    'user_id' => $request->user_id,
+                    'minute_point' => $minute_point_string, // Store all minute points in one string
+                    'if_more_detail' => $if_more_detail,    // Store if_more_detail
+                    'department_id' => $request->department_id,
+                    'project_id' => $request->project_id,   // Store project_id
+                    'capture_logged_user_id' => $capture_logged_user_id, // Store logged-in user ID
+                ]);
+
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Meeting minute(s) created successfully.',
+                ], 201);
+            } catch (\Exception $e) {
+                Log::error('Failed to create meeting minute: ' . $e->getMessage());
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Failed to create meeting minute.',
+                    'error' => $e->getMessage(),
+                ], 500);
+            }
         }
     }
 
-    
-
     // Show a specific meeting minute
-    public function show($id)
+    public function show($minutes_id)
     {
         try {
             $minute = MeetingMinute::with([
                 'user:user_id,name',
                 'department:department_id,name',
-                'project:project_id,project_name',
-                'loggedUser:capture_logged_user_id,name'
-            ])->findOrFail($id);
+                'project:project_id,project_name'
+            ])->findOrFail($minutes_id);
 
             return response()->json([
                 'status' => true,
@@ -119,60 +171,117 @@ class MeetingMinuteController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Failed to fetch the meeting minute.',
+                'message' => 'Meeting minute not found.',
                 'error' => $e->getMessage(),
-            ], 500);
+            ], 404);
         }
     }
 
     // Update a meeting minute
-    public function update(Request $request, $id)
+    public function update(Request $request, $minutes_id)
     {
-        $validator = Validator::make($request->all(), [
-            'minute_point' => 'nullable|array',
-            'minute_point.*' => 'nullable|string',
-            'user_id' => 'nullable|exists:users,user_id',
-            'department_id' => 'nullable|exists:departments,department_id',
-            'if_more_detail' => 'nullable|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => false,
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
-        try {
-            $minute = MeetingMinute::findOrFail($id);
-
-            // Update the fields if provided
-            $minute->update([
-                'minute_point' => $request->minute_point ?? $minute->minute_point,
-                'user_id' => $request->user_id ?? $minute->user_id,
-                'department_id' => $request->department_id ?? $minute->department_id,
-                'if_more_detail' => $request->if_more_detail ?? $minute->if_more_detail,
+        // Check if this is HR meeting minutes (with meeting details) or accountant minutes
+        $isHrMinutes = $request->has('meeting_date') || $request->has('meeting_title');
+        
+        if ($isHrMinutes) {
+            // HR meeting minutes validation
+            $validator = Validator::make($request->all(), [
+                'meeting_title' => 'required|string',
+                'meeting_date' => 'required|date',
+                'attendees' => 'required|string',
+                'agenda' => 'required|string',
+                'discussion' => 'nullable|string',
+                'decisions' => 'nullable|string',
+                'next_meeting' => 'nullable|string',
+                'department_id' => 'nullable|exists:departments,department_id',
+                'project_id' => 'nullable|exists:projects,project_id',
             ]);
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Meeting minute updated successfully.',
-                'data' => $minute,
-            ], 200);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to update meeting minute.',
-                'error' => $e->getMessage(),
-            ], 500);
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
+
+            try {
+                $minute = MeetingMinute::findOrFail($minutes_id);
+
+                // Update HR meeting minutes fields
+                $minute->update([
+                    'meeting_title' => $request->meeting_title,
+                    'meeting_date' => $request->meeting_date,
+                    'attendees' => $request->attendees,
+                    'agenda' => $request->agenda,
+                    'discussion' => $request->discussion,
+                    'decisions' => $request->decisions,
+                    'next_meeting' => $request->next_meeting,
+                    'department_id' => $request->department_id,
+                    'project_id' => $request->project_id,
+                ]);
+
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Meeting minutes updated successfully.',
+                    'data' => $minute,
+                ], 200);
+            } catch (\Exception $e) {
+                Log::error('Failed to update meeting minute: ' . $e->getMessage());
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Failed to update meeting minute.',
+                    'error' => $e->getMessage(),
+                ], 500);
+            }
+        } else {
+            // Accountant meeting minutes validation (original logic)
+            $validator = Validator::make($request->all(), [
+                'minute_point' => 'nullable|array',
+                'minute_point.*' => 'nullable|string',
+                'user_id' => 'nullable|exists:users,user_id',
+                'department_id' => 'nullable|exists:departments,department_id',
+                'if_more_detail' => 'nullable|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
+
+            try {
+                $minute = MeetingMinute::findOrFail($minutes_id);
+
+                // Update the fields if provided
+                $minute->update([
+                    'minute_point' => $request->minute_point ?? $minute->minute_point,
+                    'user_id' => $request->user_id ?? $minute->user_id,
+                    'department_id' => $request->department_id ?? $minute->department_id,
+                    'if_more_detail' => $request->if_more_detail ?? $minute->if_more_detail,
+                ]);
+
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Meeting minute updated successfully.',
+                    'data' => $minute,
+                ], 200);
+            } catch (\Exception $e) {
+                Log::error('Failed to update meeting minute: ' . $e->getMessage());
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Failed to update meeting minute.',
+                    'error' => $e->getMessage(),
+                ], 500);
+            }
         }
     }
 
     // Delete a meeting minute
-    public function destroy($id)
+    public function destroy($minutes_id)
     {
         try {
-            $minute = MeetingMinute::findOrFail($id);
+            $minute = MeetingMinute::findOrFail($minutes_id);
             $minute->delete();
 
             return response()->json([
@@ -187,7 +296,6 @@ class MeetingMinuteController extends Controller
             ], 500);
         }
     }
-
 
     public function fetchMeetingMinutesReport(Request $request)
     {

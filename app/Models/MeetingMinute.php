@@ -15,12 +15,16 @@ class MeetingMinute extends Model
 
      protected $fillable = [
         'user_id',
-        'minute_point',
-        'if_more_detail',
+        'meeting_title',
+        'meeting_date',
+        'attendees',
+        'agenda',
+        'discussion',
+        'decisions',
+        'next_meeting',
         'department_id',
         'project_id',
         'capture_logged_user_id'
-
     ];
 
 
@@ -40,10 +44,4 @@ class MeetingMinute extends Model
     {
         return $this->belongsTo(Project::class, 'project_id','project_id');
     }
-
-    public function loggedUser()
-    {
-        return $this->belongsTo(User::class, 'capture_logged_user_id', 'user_id'); // Link 'user_id' to 'id'
-    }
-
 }

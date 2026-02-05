@@ -143,67 +143,30 @@ class AttendanceController extends Controller
     // Update an existing attendance record
     public function update(Request $request, $att_id)
     {
-        // Check if this is HR attendance (with meeting details) or accountant attendance
-        $isHrAttendance = $request->has('meeting_date') || $request->has('meeting_type');
-        
-        if ($isHrAttendance) {
-            // HR attendance validation
-            $validatedData = $request->validate([
-                'meeting_date' => 'required|date',
-                'meeting_type' => 'required|string',
-                'location' => 'nullable|string',
-                'attendees' => 'required|string',
-                'notes' => 'nullable|string',
-            ]);
-            
-            try {
-                $attendance = Attendance::findOrFail($att_id);
-                $attendance->update([
-                    'meeting_date' => $validatedData['meeting_date'],
-                    'meeting_type' => $validatedData['meeting_type'],
-                    'location' => $validatedData['location'],
-                    'attendees' => $validatedData['attendees'],
-                    'notes' => $validatedData['notes'],
-                ]);
+        $validatedData = $request->validate([
+            'attenda_id' => 'required|exists:users,id',
+            'is_present' => 'required|in:present,not-present',
+            'if_not_present_and_have_reason' => 'nullable|string',
+        ]);
 
-                return response()->json([
-                    'status' => 'success',
-                    'data' => $attendance,
-                ], 200);
-            } catch (\Exception $e) {
-                Log::error('Failed to update attendance: ' . $e->getMessage());
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Failed to update attendance',
-                ], 500);
-            }
-        } else {
-            // Accountant attendance validation (original logic)
-            $validatedData = $request->validate([
-                'attenda_id' => 'required|exists:users,id',
-                'is_present' => 'required|in:present,not-present',
-                'if_not_present_and_have_reason' => 'nullable|string',
+        try {
+            $attendance = Attendance::findOrFail($att_id);
+            $attendance->update([
+                'attenda_id' => $validatedData['attenda_id'],
+                'is_present' => $validatedData['is_present'],
+                'if_not_present_and_have_reason' => $validatedData['if_not_present_and_have_reason'],
             ]);
 
-            try {
-                $attendance = Attendance::findOrFail($att_id);
-                $attendance->update([
-                    'attenda_id' => $validatedData['attenda_id'],
-                    'is_present' => $validatedData['is_present'],
-                    'if_not_present_and_have_reason' => $validatedData['if_not_present_and_have_reason'],
-                ]);
-
-                return response()->json([
-                    'status' => 'success',
-                    'data' => $attendance,
-                ], 200);
-            } catch (\Exception $e) {
-                Log::error('Failed to update attendance: ' . $e->getMessage());
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Attendance not found',
-                ], 404);
-            }
+            return response()->json([
+                'status' => 'success',
+                'data' => $attendance,
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch attendance: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Attendance not found',
+            ], 404);
         }
     }
 

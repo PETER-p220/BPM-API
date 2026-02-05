@@ -14,7 +14,9 @@ class Chat extends Model
 
     protected $fillable = [
         'title',
+        'titles',
         'description',
+        'priority',
         'update_photo',
         'update_file',
         'user_id',

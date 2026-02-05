@@ -16,9 +16,13 @@ class Attendance extends Model
 
      protected $fillable = [
         'user_id',
-        'attenda_id',
+        'meeting_date',
+        'meeting_type',
+        'location',
+        'attendees',
+        'notes',
         'is_present',
-        'if_not_present_and_have_reason',
+        'if_not_present_and_have_reason'
     ];
 
 
