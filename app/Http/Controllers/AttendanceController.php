@@ -226,4 +226,31 @@ class AttendanceController extends Controller
             ], 500);
         }
     }
+
+    // Fetch daily attendance report for a specific date
+    public function fetchDailyReport(Request $request)
+    {
+        try {
+            // Validate the request
+            $validatedData = $request->validate([
+                'date' => 'required|date',
+            ]);
+
+            // Fetch attendance records for the specified date
+            $attendances = Attendance::with('user')
+                ->whereDate('created_at', $validatedData['date'])
+                ->get();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $attendances,
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch daily attendance report: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch daily attendance report',
+            ], 500);
+        }
+    }
 }
