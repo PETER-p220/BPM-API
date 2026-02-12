@@ -180,12 +180,11 @@ class RequestForPurchaseController extends Controller
     }
 
     // Update a request for purchase
-    public function update(Request $request, $request_for_id)
+    public function update(Request $request)
     {
         try {
-            $requestForPurchase = RequestForPurchase::findOrFail($request_for_id);
-            
             $validator = Validator::make($request->all(), [
+                'request_for_id' => 'required|integer|exists:request_for_purchases,request_for_id',
                 'status' => 'required|in:pending,accepted,rejected',
                 'rejection_reason' => 'required_if:status,rejected|string|max:500'
             ]);
@@ -198,10 +197,20 @@ class RequestForPurchaseController extends Controller
                 ], 400);
             }
 
-            $requestForPurchase->update([
-                'status' => $request->status,
-                'rejection_reason' => $request->rejection_reason
-            ]);
+            $requestForPurchase = RequestForPurchase::findOrFail($request->request_for_id);
+
+            $updateData = [
+                'status' => $request->status
+            ];
+
+            // Only set rejection_reason if status is rejected, otherwise use empty string
+            if ($request->status === 'rejected') {
+                $updateData['rejection_reason'] = $request->rejection_reason;
+            } else {
+                $updateData['rejection_reason'] = '';
+            }
+
+            $requestForPurchase->update($updateData);
 
             return response()->json([
                 'status' => true,

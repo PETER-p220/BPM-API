@@ -3,8 +3,8 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
- use App\Http\Controllers\RoleController;
- use App\Http\Controllers\PermissionController;
+use App\Http\Controllers\RoleController;
+use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\TenderController;
 use App\Http\Controllers\AssignTenderController;
@@ -35,13 +35,13 @@ use App\Http\Controllers\ProjectExtensionController;
 use App\Http\Controllers\RequestForPurchaseController;
 use App\Http\Controllers\ExtendRequestController;
 use App\Http\Controllers\ContractController;
+use App\Http\Controllers\DashboardController;
 
 
 // Public Routes
 Route::get('/login', function () {
     return response()->json(['message' => 'Unauthorized user! Please login to access the API'], 401);
 })->name('login');
-
 
 // Authentication Routes
 Route::post('/auth/add-user', [AuthController::class, 'register']);
@@ -57,26 +57,30 @@ Route::post('/accept-cookies', [CookieController::class, 'acceptCookies']);
 Route::middleware(['auth:sanctum', 'token.expiration'])->group(function () {
 
 //user route
-    Route::get('/all/users', [AuthController::class, 'users']);
-    Route::get('/users/byname', [AuthController::class, 'dropdownUsersByName']);
-    Route::get('/users/byrole', [AuthController::class, 'dropdownUsersByRole']);
-    Route::get('user/profile', [AuthController::class, 'getLoggedUserProfile']);
-    Route::get('/user/withrole', [AuthController::class, 'getUsersWithRoles']);
-    Route::post('/update-profile', [AuthController::class, 'updateProfile']);
-    Route::get('/count/users', [AuthController::class, 'countUsers']);
+Route::get('/all/users', [AuthController::class, 'users']);
+Route::get('/users/byname', [AuthController::class, 'dropdownUsersByName']);
+Route::get('/users/byrole', [AuthController::class, 'dropdownUsersByRole']);
+Route::get('user/profile', [AuthController::class, 'getLoggedUserProfile']);
+Route::get('/user/withrole', [AuthController::class, 'getUsersWithRoles']);
+Route::post('/update-profile', [AuthController::class, 'updateProfile']);
+Route::get('/count/users', [AuthController::class, 'countUsers']);
     
+// Dashboard Routes
+Route::get('/dashboard/stats', [DashboardController::class, 'getDashboardStats']);
+
 Route::get('/count/requests', [RequestForProjectController::class, 'countRequests']);
 Route::get('/count/user/requests/approved', [RequestForProjectController::class, 'countApprovedRequests']);
 Route::get('/count/user/requests/rejected', [RequestForProjectController::class, 'countRejectedRequests']);
 Route::get('/count/total-receipts', [ReceiptController::class, 'countTotalReceipts']);
 
-    // Route to show a specific user by user_id
-    Route::get('/user/{user_id}', [AuthController::class, 'showUserById']);
-    // Route to update a specific user by user_id
-    Route::put('/user/{user_id}', [AuthController::class, 'updateUser']);
-    Route::delete('/auth/user/{user_id}', [AuthController::class, 'deleteUser']);
-    Route::get('/audit-trail', [AuthController::class, 'getAuditTrail']);
-    Route::post('/store-cookies', [AuthController::class, 'storeCookies']);
+// Route to show a specific user by user_id
+Route::get('/user/{user_id}', [AuthController::class, 'showUserById']);
+
+// Route to update a specific user by user_id
+Route::put('/user/{user_id}', [AuthController::class, 'updateUser']);
+Route::delete('/auth/user/{user_id}', [AuthController::class, 'deleteUser']);
+Route::get('/audit-trail', [AuthController::class, 'getAuditTrail']);
+Route::post('/store-cookies', [AuthController::class, 'storeCookies']);
     
 
 //admin,hod,account and engineers rout drop dropdown
@@ -87,9 +91,9 @@ Route::get('/dropdown/admin', [AuthController::class, 'AdminsDropDown']);
 Route::get('/admin-dropdown', [AuthController::class, 'AdminDropDown']);
 
 
-    //roles route
-    Route::apiResource('/auth/roles', RoleController::class);
-    Route::get('/count/roles', [RoleController::class, 'countRoles']);
+//roles route
+Route::apiResource('/auth/roles', RoleController::class);
+Route::get('/count/roles', [RoleController::class, 'countRoles']);
 
 
 //department Route

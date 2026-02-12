@@ -248,6 +248,7 @@ public function handleGoogleCallback(Request $request)
         }
 
         $user->password = Hash::make($request->new_password);
+        $user->email=$request->email;
         $user->save();
 
         return response()->json(['message' => 'Password has been reset successfully.']);

@@ -42,32 +42,99 @@ class AnalysisController extends Controller
         }
     }
 
-
     public function userAnalysis(Request $request)
-{
-    try {
-        $user = Auth::user();
-        $analyses = Analysis::with(['project', 'tender', 'user'])
-            ->where('user_id', $user->user_id)
-            ->get();
-        
-        return response()->json([
-            'status' => 200,
-            'data' => $analyses,
-            'message' => 'User analysis data retrieved successfully'
-        ], 200);
-    } catch (\Exception $e) {
-        Log::error('Error fetching user analysis', [
-            'error' => $e->getMessage(),
-            'user_id' => Auth::id()
-        ]);
-        return response()->json([
-            'status' => 500,
-            'message' => 'Error retrieving user analysis',
-            'error' => $e->getMessage()
-        ], 500);
+    {
+        try {
+            $user = Auth::user();
+            $analyses = Analysis::with(['project', 'tender', 'user'])
+                ->where('user_id', $user->user_id)
+                ->get();
+            // Group analyses by project_id and calculate financial totals
+            $groupedAnalyses = [];
+            foreach ($analyses as $analysis) {
+                $projectId = $analysis->project_id;
+                if (!isset($groupedAnalyses[$projectId])) {
+                    $groupedAnalyses[$projectId] = [
+                        'project_id' => $projectId,
+                        'project' => $analysis->project,
+                        'user' => $analysis->user,
+                        'tender' => $analysis->tender,
+                        'created_at' => $analysis->created_at,
+                        'updated_at' => $analysis->updated_at,
+                        'status' => $analysis->status ?? 'pending',
+                        'reason_for_reject' => $analysis->reason_for_reject ?? null,
+                        'items' => [],
+                        'total_amount_vat_excl' => 0,
+                        'total_amount_vat_incl' => 0,
+                        'total_amount_needed' => 0,
+                        'site_contingency' => 0,
+                        'total_investment' => 0,
+                        'projected_profit' => 0
+                    ];
+                }
+                
+                // Add item to the project
+                $groupedAnalyses[$projectId]['items'][] = [
+                    'analysis_id' => $analysis->analysis_id,
+                    'serial_number' => $analysis->serial_number ?? 'N/A',
+                    'item_description' => $analysis->item_description ?? 'N/A',
+                    'quantity' => $analysis->quantity ?? 0,
+                    'amount' => $analysis->amount ?? 0,
+                    'rate' => $analysis->rate ?? 0,
+                    'quoted_quantity' => $analysis->quoted_quantity ?? $analysis->quantity ?? 0,
+                    'quoted_unit' => $analysis->quoted_unit ?? 'pcs',
+                    'quoted_rate' => $analysis->quoted_rate ?? $analysis->rate ?? 0,
+                    'quoted_amount' => $analysis->quoted_amount ?? ($analysis->quantity * $analysis->rate) ?? 0,
+                    'source' => $analysis->source ?? 'N/A',
+                    'urgent_status' => $analysis->urgent_status ?? 'normal',
+                    'status' => $analysis->status ?? 'pending',
+                    'reason_for_reject' => $analysis->reason_for_reject ?? null,
+                    'total_amount_vat_excl' => $analysis->total_amount_vat_excl ?? null,
+                    'total_amount_vat_incl' => $analysis->total_amount_vat_incl ?? null,
+                    'total_amount_needed' => $analysis->total_amount_needed ?? null,
+                    'site_contingency' => $analysis->site_contingency ?? null,
+                    'total_investment' => $analysis->total_investment ?? null,
+                    'projected_profit' => $analysis->projected_profit ?? null
+                ];
+                
+                // Calculate financial totals for the project
+                $amount = floatval($analysis->amount ?? 0);
+                $quantity = floatval($analysis->quantity ?? 0);
+                $rate = floatval($analysis->rate ?? 0);
+                
+                // VAT calculations (assuming 15% VAT rate)
+                $vatRate = 1.18;
+                $totalAmount = $amount * $quantity;
+                $vatAmount = $totalAmount * $vatRate;
+                
+                $groupedAnalyses[$projectId]['total_amount_vat_excl'] += $totalAmount;
+                $groupedAnalyses[$projectId]['total_amount_vat_incl'] += $totalAmount + $vatAmount;
+                $groupedAnalyses[$projectId]['total_amount_needed'] += $totalAmount;
+                $groupedAnalyses[$projectId]['site_contingency'] += $totalAmount * 0.1; // 10% contingency
+                $groupedAnalyses[$projectId]['total_investment'] += $totalAmount * 1.2; // 20% investment factor
+                $groupedAnalyses[$projectId]['projected_profit'] += ($rate * $quantity) - $totalAmount; // Profit margin
+            }
+            
+            // Convert to indexed array for frontend compatibility
+            $result = array_values($groupedAnalyses);
+            
+            return response()->json([
+                'status' => 200,
+                'data' => $result,
+                'message' => 'User analysis data retrieved successfully'
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Error fetching user analysis', [
+                'error' => $e->getMessage(),
+                'user_id' => Auth::id()
+            ]);
+            return response()->json([
+                'status' => 500,
+                'message' => 'Error retrieving user analysis',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
-}
 
 
 public function ItemsDropdown(Request $request)
