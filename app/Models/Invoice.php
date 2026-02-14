@@ -8,7 +8,33 @@ use Illuminate\Database\Eloquent\Model;
 class Invoice extends Model
 {
     use HasFactory;
+
+    protected $table = 'invoices';
+    protected $primaryKey = 'id';
+    public $incrementing = true;
+    protected $keyType = 'int';
+
     protected $fillable = [
+        'item_description',
+        'number_of_cars',
+        'period_months',
+        'uom',
+        'unit_price',
+        'gross_value',
+        'status',
+        'created_by',
+        'updated_by',
+        'invoice_number',
+        'invoice_date',
+        'due_date',
+        'client_name',
+        'client_email',
+        'client_phone',
+        'notes',
+        'tax_rate',
+        'tax_amount',
+        'total_amount',
+        // Legacy fields for compatibility
         'payment',
         'item',
         'ref_number',
@@ -21,12 +47,38 @@ class Invoice extends Model
         'tender_id',
         'budget',
         'contract',
-        'created_by',
         'start_date',
         'end_date',
     ];
 
-     public function department()
+    protected $casts = [
+        'number_of_cars' => 'decimal:2',
+        'period_months' => 'decimal:2',
+        'unit_price' => 'decimal:2',
+        'gross_value' => 'decimal:2',
+        'tax_rate' => 'decimal:2',
+        'tax_amount' => 'decimal:2',
+        'total_amount' => 'decimal:2',
+        'invoice_date' => 'date',
+        'due_date' => 'date',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'amount' => 'decimal:2',
+        'budget' => 'decimal:2'
+    ];
+
+    // Relationships
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by', 'user_id');
+    }
+
+    public function updater()
+    {
+        return $this->belongsTo(User::class, 'updated_by', 'user_id');
+    }
+
+    public function department()
     {
         return $this->belongsTo(Department::class, 'department_id','department_id');
     }
@@ -36,18 +88,89 @@ class Invoice extends Model
         return $this->belongsTo(Project::class, 'project_id','project_id');
     }
 
-     public function user()
+    public function user()
     {
         return $this->belongsTo(User::class, 'user_id', 'user_id');
     }
 
-   public function requestForProject()
+    public function requestForProject()
     {
         return $this->belongsTo(RequestForProject::class, 'request_id', 'request_id');
     }
 
-     public function tender()
+    public function tender()
     {
         return $this->belongsTo(Tender::class, 'tender_id', 'tender_id');
+    }
+
+    // Scopes
+    public function scopeActive($query)
+    {
+        return $query->where('status', 'active');
+    }
+
+    public function scopeDraft($query)
+    {
+        return $query->where('status', 'draft');
+    }
+
+    public function scopeSent($query)
+    {
+        return $query->where('status', 'sent');
+    }
+
+    public function scopePaid($query)
+    {
+        return $query->where('status', 'paid');
+    }
+
+    public function scopeOverdue($query)
+    {
+        return $query->where('due_date', '<', now())->where('status', '!=', 'paid');
+    }
+
+    // Accessors
+    public function getFormattedUnitPriceAttribute()
+    {
+        return number_format($this->unit_price, 2);
+    }
+
+    public function getFormattedGrossValueAttribute()
+    {
+        return number_format($this->gross_value, 2);
+    }
+
+    public function getFormattedTotalAmountAttribute()
+    {
+        return number_format($this->total_amount, 2);
+    }
+
+    public function getStatusBadgeAttribute()
+    {
+        $badges = [
+            'draft' => '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">Draft</span>',
+            'sent' => '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Sent</span>',
+            'paid' => '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Paid</span>',
+            'overdue' => '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Overdue</span>',
+            'cancelled' => '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Cancelled</span>'
+        ];
+
+        return $badges[$this->status] ?? '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">Unknown</span>';
+    }
+
+    // Mutators
+    public function setGrossValueAttribute($value)
+    {
+        $this->attributes['gross_value'] = $this->number_of_cars * $this->period_months * $this->unit_price;
+    }
+
+    public function setTaxAmountAttribute($value)
+    {
+        $this->attributes['tax_amount'] = $this->gross_value * ($this->tax_rate / 100);
+    }
+
+    public function setTotalAmountAttribute($value)
+    {
+        $this->attributes['total_amount'] = $this->gross_value + $this->tax_amount;
     }
 }

@@ -320,4 +320,16 @@ Route::resource('receipts', ReceiptController::class);
     Route::put('/contracts/{contract_id}', [ContractController::class, 'update'])->name('contracts.update');
     Route::delete('/contracts/{contract_id}', [ContractController::class, 'destroy'])->name('contracts.destroy');
     Route::get('/c-dropdown', [ContractController::class, 'getContractTitles']);
+
+    // Accountant Invoice Management Routes
+    Route::match(['get', 'options'], '/accountant/invoices', [InvoiceController::class, 'indexAccountant']);
+    Route::match(['post', 'options'], '/accountant/invoices', [InvoiceController::class, 'storeAccountant']);
+    Route::match(['get', 'options'], '/accountant/invoices/{id}', [InvoiceController::class, 'show']);
+    Route::match(['put', 'options'], '/accountant/invoices/{id}', [InvoiceController::class, 'updateAccountant']);
+    Route::match(['delete', 'options'], '/accountant/invoices/{id}', [InvoiceController::class, 'destroyAccountant']);
+    Route::match(['get', 'options'], '/accountant/statistics', [InvoiceController::class, 'statisticsAccountant']);
+    Route::match(['post', 'options'], '/accountant/invoices/{id}/send', [InvoiceController::class, 'sendAccountantInvoice']);
+    Route::match(['post', 'options'], '/accountant/invoices/{id}/mark-paid', [InvoiceController::class, 'markAccountantInvoiceAsPaid']);
+    Route::match(['get', 'options'], '/accountant/invoices/export/excel', [InvoiceController::class, 'exportInvoicesToExcel']);
+    Route::match(['get', 'options'], '/accountant/invoices/export/pdf', [InvoiceController::class, 'exportInvoicesToPDF']);
 });
