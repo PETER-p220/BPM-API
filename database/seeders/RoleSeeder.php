@@ -13,22 +13,42 @@ class RoleSeeder extends Seeder
             [
                 'category'    => 'admin',
                 'description' => 'System Administrator - Full access to all features and configurations',
+                'dashboard'   => 'Dashboard.vue'
             ],
             [
                 'category'    => 'hod',
                 'description' => 'Head of Department - Oversees department processes, approvals, and reporting',
+                'dashboard'   => 'HodDashboard.vue'
+            ],
+            [
+                'category'    => 'tender',
+                'description' => 'Tender Manager - Manages tender creation, evaluation, and awarding processes',
+                'dashboard'   => 'TendersDashboard.vue'
+            ],
+            [
+                'category'    => 'hr',
+                'description' => 'HR Manager - Handles human resources, employee management, and payroll',
+                'dashboard'   => 'HrDashboard.vue'
             ],
             [
                 'category'    => 'engineer',
                 'description' => 'Engineer - Responsible for technical execution, project delivery, and maintenance',
+                'dashboard'   => 'UserDashboard.vue'
             ],
             [
                 'category'    => 'accountant',
                 'description' => 'Accountant - Handles financial transactions, budgeting, and payments',
+                'dashboard'   => 'AccountantDashboard.vue'
             ],
             [
                 'category'    => 'staff',
                 'description' => 'Regular Staff - Access to assigned business processes and tasks',
+                'dashboard'   => 'TendersDashboard.vue'
+            ],
+            [
+                'category'    => 'user',
+                'description' => 'Regular User - Access to assigned business processes and tasks',
+                'dashboard'   => 'UserDashboard.vue'
             ],
         ];
 
