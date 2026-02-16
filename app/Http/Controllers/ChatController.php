@@ -437,4 +437,71 @@ public function getChatReports(Request $request)
     }
 }
 
+    // Admin method to view all department updates
+    public function adminAllUpdates()
+    {
+        try {
+            // Only admin can access this
+            if (Auth::user()->role_id !== 1) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Unauthorized. Admin access required.',
+                ], 403);
+            }
+
+            // Get all chats with user details
+            $chats = Chat::with('user:user_id,name')
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            if ($chats->isEmpty()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No updates found.',
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'All department updates retrieved successfully.',
+                'data' => $chats
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch updates: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    // Department updates method - each department can see all updates
+    public function departmentUpdates()
+    {
+        try {
+            // Get all chats with user details for department users
+            $chats = Chat::with('user:user_id,name')
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            if ($chats->isEmpty()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No updates found.',
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Department updates retrieved successfully.',
+                'data' => $chats
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch updates: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 }

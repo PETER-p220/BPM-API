@@ -7,6 +7,11 @@ use App\Http\Controllers\TenderController;
 use App\Http\Controllers\AssignTenderController;
 use App\Http\Controllers\TenderDocSubmissionController;
 use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\ChatController;
+use App\Models\IntentionToAward;
+use App\Models\AwardLetter;
+use App\Models\InsuranceBond;
+use App\Models\SecurityDeclaration;
 
 class DashboardController extends Controller
 {
@@ -40,11 +45,34 @@ class DashboardController extends Controller
                 'failed' => $this->getCount($projectController, 'countFailedProjects')
             ];
 
+            // Get awards statistics
+            $awards = [
+                'total' => $this->getAwardsCount(),
+                'intentions' => $this->getIntentionsCount(),
+                'letters' => $this->getAwardLettersCount()
+            ];
+
+            // Get performances statistics
+            $performances = [
+                'total' => $this->getPerformancesCount(),
+                'insuranceBonds' => $this->getInsuranceBondsCount(),
+                'securityDeclarations' => $this->getSecurityDeclarationsCount()
+            ];
+
+            // Get updates statistics
+            $updates = [
+                'total' => $this->getUpdatesCount(),
+                'recent' => $this->getRecentUpdatesCount()
+            ];
+
             return response()->json([
                 'status' => 'success',
                 'data' => [
                     'tenders' => $tenders,
-                    'projects' => $projects
+                    'projects' => $projects,
+                    'awards' => $awards,
+                    'performances' => $performances,
+                    'updates' => $updates
                 ]
             ], 200);
 
@@ -89,6 +117,102 @@ class DashboardController extends Controller
             }
             
             return 0;
+        } catch (\Exception $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Get total awards count
+     */
+    private function getAwardsCount()
+    {
+        try {
+            return IntentionToAward::count() + AwardLetter::count();
+        } catch (\Exception $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Get intentions to award count
+     */
+    private function getIntentionsCount()
+    {
+        try {
+            return IntentionToAward::count();
+        } catch (\Exception $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Get award letters count
+     */
+    private function getAwardLettersCount()
+    {
+        try {
+            return AwardLetter::count();
+        } catch (\Exception $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Get total performances count
+     */
+    private function getPerformancesCount()
+    {
+        try {
+            return InsuranceBond::count() + SecurityDeclaration::count();
+        } catch (\Exception $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Get insurance bonds count
+     */
+    private function getInsuranceBondsCount()
+    {
+        try {
+            return InsuranceBond::count();
+        } catch (\Exception $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Get security declarations count
+     */
+    private function getSecurityDeclarationsCount()
+    {
+        try {
+            return SecurityDeclaration::count();
+        } catch (\Exception $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Get total updates count
+     */
+    private function getUpdatesCount()
+    {
+        try {
+            return \App\Models\Chat::count();
+        } catch (\Exception $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Get recent updates count (last 7 days)
+     */
+    private function getRecentUpdatesCount()
+    {
+        try {
+            return \App\Models\Chat::where('created_at', '>=', now()->subDays(7))->count();
         } catch (\Exception $e) {
             return 0;
         }

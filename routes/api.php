@@ -280,10 +280,12 @@ Route::get('/count/proj-activities/for-user', [ProjectActivitiesController::clas
 
 
  //udpdates
- Route::resource('/updates', ChatController::class);
+Route::resource('/updates', ChatController::class);
 Route::get('/my/updates', [ChatController::class, 'MyChats']);
 Route::get('/count/total-updates', [ChatController::class, 'countAllChats']);
 Route::get('/reports/for-updates', [ChatController::class, 'getChatReports']);
+Route::get('/admin/all-updates', [ChatController::class, 'adminAllUpdates']);
+Route::get('/department-updates', [ChatController::class, 'departmentUpdates']);
 
 
 //analyses

@@ -641,7 +641,7 @@ class InvoiceController extends Controller
     <title>Invoice Report</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
-        h1 { color: #333; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h1 { color: BLUE; border-bottom: 2px solid #333; padding-bottom: 10px; }
         .meta { color: #666; margin-bottom: 20px; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th { background-color: #f5f5f5; padding: 10px; text-align: left; border: 1px solid #ddd; font-weight: bold; }
@@ -655,8 +655,16 @@ class InvoiceController extends Controller
     </style>
 </head>
 <body>
-    <h1>Invoice Report</h1>
-    <div class="meta">Generated on ' . date('Y-m-d H:i:s') . '</div>
+    <h1>TERA TECHNOLOGIES AND ENGINEERING LIMITED</h1>
+    <p>Supply, Installation and maintenance of Telecoms networks and Equipments, PABX and Unified Communication, Networking and Connectivity Solutions, CCTV, Access Control Systems, Fire Alarm Systems, Electricaland power systems, and all types of office Automation equipments.</p>
+    </br>
+    </br>
+    <h2 style="color:red">REGISTERED CONTRACTOR IN ELECTRICAL <i style="color:cyan">(CLASS FOUR)__</i> TELECOMS, ICT AND SECURITY SYSTEMS <i style="color:cyan"> (CLASS TWO)</i>
+    <p> Office: Mbezi Beach Africana, Plot No. 2283, Block H, Tarangire Street, Bagamoyo Road/African Drive, P.O. Box 31257, Dar es Salaam, Tanzania.</br>
+    Tel/Fax: +255 22 2701611, Cell: +255 713 899 309 E-mail: info@teratech.co.tz, Website: www.teratech.co.tz   </p>
+
+    <h3>TAX INVOICE FOR VEHICLE TRACKER INSTALLATION </H3>
+    
     
     <table>
         <thead>
@@ -693,6 +701,7 @@ class InvoiceController extends Controller
         $html .= '
         </tbody>
     </table>
+        <div class="meta">Generated on ' . date('Y-m-d H:i:s') . '</div>
 </body>
 </html>';
 
