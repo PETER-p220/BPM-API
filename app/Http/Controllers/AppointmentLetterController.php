@@ -262,7 +262,145 @@ class AppointmentLetterController extends Controller
         }
     }
 
-    public function destroy($letter_id)
+    /**
+     * Accept an appointment letter
+     */
+    public function accept(Request $request, $letter_id)
+    {
+        try {
+            $letter = AppointmentLetter::findOrFail($letter_id);
+            
+            // Verify the logged-in user is the assigned engineer
+            $currentUserId = Auth::id();
+            
+            if ($letter->user_id !== $currentUserId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'You are not authorized to accept this appointment letter.'
+                ], 403);
+            }
+
+            $letter->update([
+                'status' => 'accepted',
+                'status_updated_at' => now()
+            ]);
+
+            // Notify admin about the acceptance
+            $this->notifyAdminStatusChange($letter, 'accepted');
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Appointment letter accepted successfully.',
+                'data' => $letter->fresh()
+            ], 200);
+        } catch (Exception $e) {
+            \Log::error('Error accepting appointment letter: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to accept appointment letter.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Reject an appointment letter
+     */
+    public function reject(Request $request, $letter_id)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'rejection_reason' => 'required|string|min:5|max:500'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Validation errors.',
+                    'errors' => $validator->errors()
+                ], 400);
+            }
+
+            $letter = AppointmentLetter::findOrFail($letter_id);
+            
+            // Verify the logged-in user is the assigned engineer
+            $currentUserId = Auth::id();
+            
+            if ($letter->user_id !== $currentUserId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'You are not authorized to reject this appointment letter.'
+                ], 403);
+            }
+            $letter->update([
+                'status' => 'rejected',
+                'status_updated_at' => now(),
+                'rejection_reason' => $request->rejection_reason
+            ]);
+
+            // Notify admin about rejection
+            $this->notifyAdminStatusChange($letter, 'rejected');
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Appointment letter rejected successfully.',
+                'data' => $letter->fresh()
+            ], 200);
+        } catch (Exception $e) {
+            \Log::error('Error rejecting appointment letter: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to reject appointment letter.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Notify admin about status changes
+     */
+    private function notifyAdminStatusChange($letter, $status)
+    {
+        try {
+            $adminUsers = User::where('role_id', 1)->get(); // Admin users
+            
+            foreach ($adminUsers as $admin) {
+                $emailData = [
+                    'letter_id' => $letter->letter_id,
+                    'tender_title' => $letter->tender->title ?? 'N/A',
+                    'engineer_name' => $letter->user->name ?? 'N/A',
+                    'engineer_email' => $letter->user->email ?? 'N/A',
+                    'status' => $status,
+                    'status_updated_at' => now()->format('Y-m-d H:i:s'),
+                    'action' => $status === 'accepted' ? 'Accepted' : 'Rejected',
+                    'rejection_reason' => $letter->rejection_reason ?? null
+                ];
+
+                $emailBody = "Appointment Letter {$status}\n\n"
+                    . "Letter ID: {$emailData['letter_id']}\n"
+                    . "Tender: {$emailData['tender_title']}\n"
+                    . "Engineer: {$emailData['engineer_name']} ({$emailData['engineer_email']})\n"
+                    . "Status Updated: {$emailData['status_updated_at']}\n";
+                    
+                if ($status === 'rejected' && $emailData['rejection_reason']) {
+                    $emailBody .= "Rejection Reason: {$emailData['rejection_reason']}\n";
+                }
+
+                Mail::raw($emailBody, function ($message) use ($admin, $status) {
+                    $message->to($admin->email)
+                        ->subject($status === 'accepted' ? 
+                            'Appointment Letter Accepted' : 
+                            'Appointment Letter Rejected'
+                        )
+                        ->from(config('mail.from.address'), config('mail.from.name'));
+                });
+            }
+        } catch (Exception $e) {
+            \Log::error('Error notifying admin: ' . $e->getMessage());
+        }
+    }
+
+    public function destroy($letter_id)    
     {
         try {
             $appointmentLetter = AppointmentLetter::findOrFail($letter_id);

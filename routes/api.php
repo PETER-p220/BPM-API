@@ -155,6 +155,8 @@ Route::get('/count/all/on-progress/projects', [ProjectController::class, 'countA
 //apointment lettter
 Route::resource('appointment-letter', AppointmentLetterController::class)->except(['create', 'edit']);
 Route::get('logged-user-appointment-letters', [AppointmentLetterController::class, 'loggedUserAppointmentLetter']);
+Route::post('appointment-letter/{letter_id}/accept', [AppointmentLetterController::class, 'accept']);
+Route::post('appointment-letter/{letter_id}/reject', [AppointmentLetterController::class, 'reject']);
 
 
 //extention  for project
