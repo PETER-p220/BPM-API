@@ -280,7 +280,6 @@ Route::get('/count/project-activities', [ProjectActivitiesController::class, 'co
 Route::get('/count/proj-activity-for-hod', [ProjectActivitiesController::class, 'countUserActivities']);
 Route::get('/count/proj-activities/for-user', [ProjectActivitiesController::class, 'countUserV1Projects']);
 
-
  //udpdates
 Route::resource('/updates', ChatController::class);
 Route::get('/my/updates', [ChatController::class, 'MyChats']);
@@ -288,7 +287,6 @@ Route::get('/count/total-updates', [ChatController::class, 'countAllChats']);
 Route::get('/reports/for-updates', [ChatController::class, 'getChatReports']);
 Route::get('/admin/all-updates', [ChatController::class, 'adminAllUpdates']);
 Route::get('/department-updates', [ChatController::class, 'departmentUpdates']);
-
 
 //analyses
 Route::apiResource('/project-analyses', ProjectAnalysisController::class);
@@ -336,4 +334,5 @@ Route::resource('receipts', ReceiptController::class);
     Route::match(['post', 'options'], '/accountant/invoices/{id}/mark-paid', [InvoiceController::class, 'markAccountantInvoiceAsPaid']);
     Route::match(['get', 'options'], '/accountant/invoices/export/excel', [InvoiceController::class, 'exportInvoicesToExcel']);
     Route::match(['get', 'options'], '/accountant/invoices/export/pdf', [InvoiceController::class, 'exportInvoicesToPDF']);
+    Route::match(['get', 'options'], '/accountant/invoices/{id}/download', [InvoiceController::class, 'downloadInvoice']);
 });

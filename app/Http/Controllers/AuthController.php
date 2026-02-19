@@ -170,19 +170,26 @@ public function handleGoogleCallback(Request $request)
             }
 
             // Exchange the code for an access token and user details
-            $googleUser = Socialite::driver('google')
-                ->stateless()
-                ->userFromCode($code); // Use userFromCode for stateless flow
+            $socialite = Socialite::driver('google')->stateless();
+            $googleUser = $socialite->user();
 
             // Find or create user
-            $user = User::updateOrCreate(
+            $user = User::firstOrCreate(
                 ['email' => $googleUser->email],
                 [
                     'name' => $googleUser->name,
                     'google_id' => $googleUser->id,
                     'role_id' => 3, // Default role_id, adjust as needed
+                    'password' => Hash::make('google_oauth_password_' . time()), // Random password for OAuth users
                 ]
             );
+            
+            // If user was found, update their Google info
+            if ($user->wasRecentlyCreated === false) {
+                $user->update([
+                    'google_id' => $googleUser->id,
+                ]);
+            }
 
             // Generate token
             $token = $user->createToken('auth_token')->plainTextToken;

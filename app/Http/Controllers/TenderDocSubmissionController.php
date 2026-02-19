@@ -60,7 +60,6 @@ public function yourSubmission()
         'user:user_id,name',
         'tender:tender_id,tender_number,title'
     ])
-    ->where('user_id', Auth::id())
     ->orderBy('submission_id', 'desc') // Order by submission_id in descending order
     ->get();
 

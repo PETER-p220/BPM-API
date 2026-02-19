@@ -15,6 +15,7 @@ class Invoice extends Model
     protected $keyType = 'int';
 
     protected $fillable = [
+        'title',
         'item_description',
         'number_of_cars',
         'period_months',
@@ -30,6 +31,9 @@ class Invoice extends Model
         'client_name',
         'client_email',
         'client_phone',
+        'tin',
+        'address',
+        'vrn',
         'notes',
         'tax_rate',
         'tax_amount',
