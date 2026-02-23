@@ -49,6 +49,7 @@ class AnalysisController extends Controller
             $analyses = Analysis::with(['project', 'tender', 'user'])
                 ->where('user_id', $user->user_id)
                 ->get();
+            
             // Group analyses by project_id and calculate financial totals
             $groupedAnalyses = [];
             foreach ($analyses as $analysis) {
@@ -69,7 +70,8 @@ class AnalysisController extends Controller
                         'total_amount_needed' => 0,
                         'site_contingency' => 0,
                         'total_investment' => 0,
-                        'projected_profit' => 0
+                        'projected_profit' => 0,
+                        'projected_profit_percentage' => 0
                     ];
                 }
                 
@@ -97,22 +99,27 @@ class AnalysisController extends Controller
                     'projected_profit' => $analysis->projected_profit ?? null
                 ];
                 
-                // Calculate financial totals for the project
-                $amount = floatval($analysis->amount ?? 0);
-                $quantity = floatval($analysis->quantity ?? 0);
-                $rate = floatval($analysis->rate ?? 0);
+                // Calculate financial totals for project
+                $quotedAmount = floatval($analysis->quoted_amount ?? ($analysis->quantity * $analysis->rate) ?? 0);
+                $buyingAmount = floatval($analysis->amount ?? 0);
                 
-                // VAT calculations (assuming 15% VAT rate)
-                $vatRate = 1.18;
-                $totalAmount = $amount * $quantity;
-                $vatAmount = $totalAmount * $vatRate;
+                // VAT calculations (18% VAT rate)
+                $vatRate = 0.18;
+                $vatAmount = $quotedAmount * $vatRate;
                 
-                $groupedAnalyses[$projectId]['total_amount_vat_excl'] += $totalAmount;
-                $groupedAnalyses[$projectId]['total_amount_vat_incl'] += $totalAmount + $vatAmount;
-                $groupedAnalyses[$projectId]['total_amount_needed'] += $totalAmount;
-                $groupedAnalyses[$projectId]['site_contingency'] += $totalAmount * 0.1; // 10% contingency
-                $groupedAnalyses[$projectId]['total_investment'] += $totalAmount * 1.2; // 20% investment factor
-                $groupedAnalyses[$projectId]['projected_profit'] += ($rate * $quantity) - $totalAmount; // Profit margin
+                $groupedAnalyses[$projectId]['total_amount_vat_excl'] += $quotedAmount;
+                $groupedAnalyses[$projectId]['total_amount_vat_incl'] += $quotedAmount + $vatAmount;
+                $groupedAnalyses[$projectId]['total_amount_needed'] += $buyingAmount;
+                $groupedAnalyses[$projectId]['site_contingency'] += $quotedAmount * 0.1; // 10% contingency
+                $groupedAnalyses[$projectId]['total_investment'] += $quotedAmount * 1.2; // 20% investment factor
+                $groupedAnalyses[$projectId]['projected_profit'] += $quotedAmount - $buyingAmount; // Profit margin
+            }
+            
+            // Calculate profit percentage for each project
+            foreach ($groupedAnalyses as $projectId => &$project) {
+                if ($project['total_amount_vat_incl'] > 0) {
+                    $project['projected_profit_percentage'] = round(($project['projected_profit'] / $project['total_amount_vat_incl']) * 100, 2);
+                }
             }
             
             // Convert to indexed array for frontend compatibility

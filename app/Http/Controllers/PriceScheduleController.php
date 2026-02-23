@@ -21,9 +21,63 @@ class PriceScheduleController extends Controller
         try {
             $priceSchedules = PriceSchedule::with(['tender', 'user'])->get();
             
+            // Group by tender_id and calculate financial totals
+            $groupedSchedules = [];
+            
+            foreach ($priceSchedules as $schedule) {
+                $tenderId = $schedule->tender_id;
+                
+                if (!isset($groupedSchedules[$tenderId])) {
+                    $groupedSchedules[$tenderId] = [
+                        'tender_id' => $tenderId,
+                        'tender' => $schedule->tender,
+                        'user' => $schedule->user,
+                        'created_at' => $schedule->created_at,
+                        'status' => $schedule->status ?? 'pending',
+                        'reason_for_reject' => $schedule->reason_for_reject ?? null,
+                        'total_amount_vat_excl' => 0,
+                        'total_amount_vat_incl' => 0,
+                        'total_amount_needed' => 0,
+                        'site_contingency' => 0,
+                        'total_investment' => 0,
+                        'projected_profit' => 0,
+                        'projected_profit_percentage' => 0,
+                        'items' => []
+                    ];
+                }
+                
+                // Calculate financial totals for the tender
+                $quotedAmount = floatval($schedule->quoted_amount ?? 0);
+                $buyingAmount = floatval($schedule->amount ?? 0);
+                
+                // VAT calculations (18% VAT rate)
+                $vatRate = 0.18;
+                $vatAmount = $quotedAmount * $vatRate;
+                
+                $groupedSchedules[$tenderId]['total_amount_vat_excl'] += $quotedAmount;
+                $groupedSchedules[$tenderId]['total_amount_vat_incl'] += $quotedAmount + $vatAmount;
+                $groupedSchedules[$tenderId]['total_amount_needed'] += $buyingAmount;
+                $groupedSchedules[$tenderId]['site_contingency'] += $quotedAmount * 0.1; // 10% contingency
+                $groupedSchedules[$tenderId]['total_investment'] += $quotedAmount * 1.2; // 20% investment factor
+                $groupedSchedules[$tenderId]['projected_profit'] += $quotedAmount - $buyingAmount; // Profit margin
+                
+                // Add schedule item
+                $groupedSchedules[$tenderId]['items'][] = $schedule;
+            }
+            
+            // Calculate profit percentage
+            foreach ($groupedSchedules as &$group) {
+                if ($group['total_amount_vat_excl'] > 0) {
+                    $group['projected_profit_percentage'] = ($group['projected_profit'] / $group['total_amount_vat_excl']) * 100;
+                }
+            }
+            
+            // Convert to indexed array for frontend compatibility
+            $result = array_values($groupedSchedules);
+            
             return response()->json([
                 'status' => 200,
-                'data' => $priceSchedules,
+                'data' => $result,
                 'message' => 'Price schedule data retrieved successfully'
             ], 200);
         } catch (\Exception $e) {
@@ -45,18 +99,76 @@ class PriceScheduleController extends Controller
     {
         try {
             $user = Auth::user();
-            // Debug: Log or return the user ID
             Log::info('Authenticated user ID: ' . $user->user_id);
-            // OR temporarily return it
-            // return response()->json(['user_id' => $user->id]);
     
-            $priceSchedules = PriceSchedule::with(['tender', 'user'])
-                ->where('user_id', $user->user_id)
-                ->get();
+            // Check if user is HOD (role != 'user')
+            if ($user->role === 'hod') {
+                // HOD can see all price schedules
+                $priceSchedules = PriceSchedule::with(['tender', 'user'])->get();
+            } else {
+                // Regular users can only see their own price schedules
+                $priceSchedules = PriceSchedule::with(['tender', 'user'])
+                    ->where('user_id', $user->user_id)
+                    ->get();
+            }
+            
+            // Group by tender_id and calculate financial totals
+            $groupedSchedules = [];
+            
+            foreach ($priceSchedules as $schedule) {
+                $tenderId = $schedule->tender_id;
+                
+                if (!isset($groupedSchedules[$tenderId])) {
+                    $groupedSchedules[$tenderId] = [
+                        'tender_id' => $tenderId,
+                        'tender' => $schedule->tender,
+                        'user' => $schedule->user,
+                        'created_at' => $schedule->created_at,
+                        'status' => $schedule->status ?? 'pending',
+                        'reason_for_reject' => $schedule->reason_for_reject ?? null,
+                        'total_amount_vat_excl' => 0,
+                        'total_amount_vat_incl' => 0,
+                        'total_amount_needed' => 0,
+                        'site_contingency' => 0,
+                        'total_investment' => 0,
+                        'projected_profit' => 0,
+                        'projected_profit_percentage' => 0,
+                        'items' => []
+                    ];
+                }
+                
+                // Calculate financial totals for the tender
+                $quotedAmount = floatval($schedule->quoted_amount ?? 0);
+                $buyingAmount = floatval($schedule->amount ?? 0);
+                
+                // VAT calculations (18% VAT rate)
+                $vatRate = 0.18;
+                $vatAmount = $quotedAmount * $vatRate;
+                
+                $groupedSchedules[$tenderId]['total_amount_vat_excl'] += $quotedAmount;
+                $groupedSchedules[$tenderId]['total_amount_vat_incl'] += $quotedAmount + $vatAmount;
+                $groupedSchedules[$tenderId]['total_amount_needed'] += $buyingAmount;
+                $groupedSchedules[$tenderId]['site_contingency'] += $quotedAmount * 0.1; // 10% contingency
+                $groupedSchedules[$tenderId]['total_investment'] += $quotedAmount * 1.2; // 20% investment factor
+                $groupedSchedules[$tenderId]['projected_profit'] += $quotedAmount - $buyingAmount; // Profit margin
+                
+                // Add schedule item
+                $groupedSchedules[$tenderId]['items'][] = $schedule;
+            }
+            
+            // Calculate profit percentage
+            foreach ($groupedSchedules as &$group) {
+                if ($group['total_amount_vat_excl'] > 0) {
+                    $group['projected_profit_percentage'] = ($group['projected_profit'] / $group['total_amount_vat_excl']) * 100;
+                }
+            }
+            
+            // Convert to indexed array for frontend compatibility
+            $result = array_values($groupedSchedules);
             
             return response()->json([
                 'status' => 200,
-                'data' => $priceSchedules,
+                'data' => $result,
                 'message' => 'Price schedule data retrieved successfully'
             ], 200);
         } catch (\Exception $e) {

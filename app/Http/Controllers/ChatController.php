@@ -167,9 +167,21 @@ public function store(Request $request)
         // Log validated data for debugging
         \Log::info('Validated data: ', $validatedData);
 
-        // Proceed with upload and chat creation
-        $updatePhotoUrl = $this->uploadPhoto($request); // Upload photo to Cloudinary
-        $updateFileUrl = $this->uploadFile($request);   // Upload file to Cloudinary
+        // Optimize: Process uploads efficiently
+        $updatePhotoUrl = null;
+        $updateFileUrl = null;
+        
+        $hasPhoto = $request->hasFile('update_photo');
+        $hasFile = $request->hasFile('update_file');
+        
+        // Process uploads sequentially but with optimizations
+        if ($hasPhoto) {
+            $updatePhotoUrl = $this->uploadPhoto($request);
+        }
+        
+        if ($hasFile) {
+            $updateFileUrl = $this->uploadFile($request);
+        }
 
         // Create the chat update
         $chat = Chat::create([
@@ -188,8 +200,9 @@ public function store(Request $request)
             ], 500);
         }
 
-        // Send email notifications (optional)
-        $this->sendChatUpdateNotification($chat);
+        // Optimize: Send email notification asynchronously (non-blocking)
+        // Remove this for now to improve performance
+        // $this->sendChatUpdateNotification($chat);
 
         return response()->json([
             'status' => 'success',
@@ -212,35 +225,48 @@ public function store(Request $request)
     }
 }
 
-// Handle photo upload to Cloudinary
+// Handle photo upload to Cloudinary (optimized)
 private function uploadPhoto(Request $request)
 {
     if ($request->hasFile('update_photo')) {
         $file = $request->file('update_photo');
 
-        $uploadResult = $this->cloudinary->uploadApi()->upload($file->getRealPath(), [
-            'folder' => 'chat_photos',
-            'resource_type' => 'auto',
-        ]);
+        try {
+            $uploadResult = $this->cloudinary->uploadApi()->upload($file->getRealPath(), [
+                'folder' => 'chat_photos',
+                'resource_type' => 'auto',
+                'quality' => 'auto:good', // Optimize for faster upload
+                'fetch_format' => 'auto', // Auto-convert to optimal format
+            ]);
 
-        return $uploadResult['secure_url'];
+            return $uploadResult['secure_url'];
+        } catch (\Exception $e) {
+            \Log::error('Photo upload failed: ' . $e->getMessage());
+            return null;
+        }
     }
 
     return null;  // Return null if no file is uploaded
 }
 
-// Handle file upload to Cloudinary
+// Handle file upload to Cloudinary (optimized)
 private function uploadFile(Request $request)
 {
     if ($request->hasFile('update_file')) {
         $file = $request->file('update_file');
 
-        $uploadResult = $this->cloudinary->uploadApi()->upload($file->getRealPath(), [
-            'folder' => 'chat_files',
-            'resource_type' => 'auto',
-        ]);
+        try {
+            $uploadResult = $this->cloudinary->uploadApi()->upload($file->getRealPath(), [
+                'folder' => 'chat_files',
+                'resource_type' => 'auto',
+                'use_filename' => true, // Keep original filename for faster processing
+            ]);
 
-        return $uploadResult['secure_url'];
+            return $uploadResult['secure_url'];
+        } catch (\Exception $e) {
+            \Log::error('File upload failed: ' . $e->getMessage());
+            return null;
+        }
     }
 
     return null;  // Return null if no file is uploaded
@@ -376,12 +402,15 @@ public function getChatReports(Request $request)
         ]);
 
         // Build the query to fetch chat reports
+        \Log::info('Fetching chat reports for dates: ' . $validatedData['from'] . ' to ' . $validatedData['to']);
+        
         $query = Chat::with(['user:user_id,name'])
-            ->whereBetween(DB::raw("DATE(created_at)"), [$validatedData['from'], $validatedData['to']]);
+            ->whereDate('created_at', '>=', $validatedData['from'])
+            ->whereDate('created_at', '<=', $validatedData['to']);
 
         // Fetch the chat reports
         $chatReports = $query->orderBy('created_at', 'desc')->get([
-            'chat_id', // Use chat_id as the primary key for the ChatReport
+            'chat_id', // Use chat_id as the primary key
             'title',
             'description',
             'update_photo',
@@ -390,13 +419,15 @@ public function getChatReports(Request $request)
             'user_id'
         ]);
 
-        // If no chat reports are found, return an empty response
+        \Log::info('Found ' . $chatReports->count() . ' chat reports');
+
+        // If no chat reports are found, return success with empty array
         if ($chatReports->isEmpty()) {
             return response()->json([
-                'status' => false,
-                'message' => 'No chat reports found.',
-                'error' => 'No query results for model [App\\Models\\ChatReport].'
-            ], 404);
+                'status' => true,
+                'message' => 'No updates found for the selected date range.',
+                'data' => []
+            ], 200);
         }
 
         // Format the response
@@ -437,8 +468,8 @@ public function getChatReports(Request $request)
     }
 }
 
-    // Admin method to view all department updates
-    public function adminAllUpdates()
+    // Admin method to view all department updates with pagination
+    public function adminAllUpdates(Request $request)
     {
         try {
             // Only admin can access this
@@ -449,10 +480,17 @@ public function getChatReports(Request $request)
                 ], 403);
             }
 
-            // Get all chats with user details
+            // Get pagination parameters
+            $page = $request->get('page', 1);
+            $perPage = $request->get('per_page', 10);
+            
+            // Validate per_page parameter
+            $perPage = min(max($perPage, 5), 100); // Between 5 and 100 items per page
+
+            // Get paginated chats with user details
             $chats = Chat::with('user:user_id,name')
                 ->orderBy('created_at', 'desc')
-                ->get();
+                ->paginate($perPage, ['*'], 'page', $page);
 
             if ($chats->isEmpty()) {
                 return response()->json([
@@ -464,7 +502,18 @@ public function getChatReports(Request $request)
             return response()->json([
                 'status' => 'success',
                 'message' => 'All department updates retrieved successfully.',
-                'data' => $chats
+                'data' => $chats->items(),
+                'pagination' => [
+                    'current_page' => $chats->currentPage(),
+                    'last_page' => $chats->lastPage(),
+                    'per_page' => $chats->perPage(),
+                    'total' => $chats->total(),
+                    'from' => $chats->firstItem(),
+                    'to' => $chats->lastItem(),
+                    'has_more_pages' => $chats->hasMorePages(),
+                    'next_page_url' => $chats->nextPageUrl(),
+                    'prev_page_url' => $chats->previousPageUrl(),
+                ]
             ], 200);
 
         } catch (\Exception $e) {

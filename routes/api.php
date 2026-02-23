@@ -223,7 +223,7 @@ Route::post('/hod/tender/reject', [TenderController::class, 'rejectTender']);
 
 //analysis route
 Route::apiResource('analysis', AnalysisController::class);
-Route::post('/approve-analysis', [AnalysisController::class, 'update']);
+Route::post('/approve-analysis', [AnalysisController::class, 'approveAnalysis']);
 Route::get('user-analysis', [AnalysisController::class, 'userAnalysis']);
 Route::get('/items-dropdown', [AnalysisController::class, 'ItemsDropdown']);
 Route::get('/logged/user-analyses/count', [AnalysisController::class, 'countUserAnalyses']);

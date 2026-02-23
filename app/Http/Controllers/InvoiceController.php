@@ -384,7 +384,7 @@ class InvoiceController extends Controller
         if (in_array($sendMethod, ['whatsapp', 'both'])) {
             if (!empty($invoice->client_phone)) {
                 try {
-                    $message  = $this->generateWhatsAppMessage((array) $invoice, $customMessage);
+                    $message  = $this->generateWhatsAppMessage($invoice, $customMessage);
                     $response = $this->sendWhatsAppMessage($invoice->client_phone, $message);
 
                     $results['whatsapp'] = $response['success'] ? 'sent' : 'failed: ' . $response['message'];
@@ -420,17 +420,20 @@ class InvoiceController extends Controller
         ]);
     }
 
-    private function generateWhatsAppMessage(array $invoice, string $customMessage = ''): string
+    private function generateWhatsAppMessage($invoice, string $customMessage = ''): string
     {
+        // Ensure we have the normalized invoice object
+        $invoice = $this->normalise($invoice);
+        
         $lines = [
-            "🧾 *INVOICE #{$invoice['invoice_number']}*",
-            "📌 *{$invoice['company_name']}*",
+            "🧾 *INVOICE #{$invoice->invoice_number}*",
+            "📌 *{$invoice->company_name}*",
             '',
             '📋 *Details:*',
-            "• Client: {$invoice['client_name']}",
-            "• Description: {$invoice['item_description']}",
-            '• Amount: TZS ' . number_format((float) $invoice['total_amount'], 2),
-            "• Due Date: {$invoice['due_date']}",
+            "• Client: {$invoice->client_name}",
+            "• Description: {$invoice->item_description}",
+            '• Amount: TZS ' . number_format((float) $invoice->total_amount, 2),
+            "• Due Date: {$invoice->due_date}",
         ];
 
         if (!empty($customMessage)) {

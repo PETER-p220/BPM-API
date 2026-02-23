@@ -38,6 +38,15 @@ class Invoice extends Model
         'tax_rate',
         'tax_amount',
         'total_amount',
+        // Company/Issuer fields
+        'company_name',
+        'company_email',
+        'company_phone',
+        'company_website',
+        'company_tin',
+        'company_vrn',
+        'company_address',
+        'company_logo',
         // Legacy fields for compatibility
         'payment',
         'item',
