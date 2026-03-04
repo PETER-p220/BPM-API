@@ -42,6 +42,11 @@ class RoleSeeder extends Seeder
                 'dashboard'   => 'HrDashboard.vue',
             ],
             [
+                'category'    => 'ceo',
+                'description' => 'CEO/Boss Manager - Executive oversight, system reports, and final approvals',
+                'dashboard'   => 'CEODashboard.vue',
+            ],
+            [
                 'category'    => 'staff',
                 'description' => 'Regular Staff - Access to assigned business processes and tasks',
                 'dashboard'   => 'TendersDashboard.vue',

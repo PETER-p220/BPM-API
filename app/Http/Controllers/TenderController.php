@@ -422,4 +422,84 @@ class TenderController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get tenders available for non-awarded reporting
+     */
+    public function availableForReporting()
+    {
+
+        try {
+            // Get tenders that are expired (simplified approach)
+            $tenders = Tender::where('expired_at', '<', now())
+                ->with(['user:user_id,name'])
+                ->select('tender_id as id', 'title', 'user_id', 'expired_at')
+                ->get()
+                ->map(function ($tender) {
+                    return [
+                        'id' => $tender->id,
+                        'title' => $tender->title,
+                        'company_name' => $tender->user ? $tender->user->name : 'Unknown',
+                        'expired_at' => $tender->expired_at
+                    ];
+                });
+
+            return response()->json($tenders);
+        } catch (\Exception $e) {
+            Log::error('Error fetching available tenders for reporting: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to fetch available tenders.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Debug method to check available tenders
+     */
+    public function debugAvailableTenders()
+    {
+        try {
+            // Get all tenders first
+            $allTenders = Tender::select('tender_id', 'title', 'expired_at', 'user_id')
+                ->with(['user:user_id,name'])
+                ->get()
+                ->map(function ($tender) {
+                    return [
+                        'tender_id' => $tender->tender_id,
+                        'title' => $tender->title,
+                        'expired_at' => $tender->expired_at,
+                        'is_expired' => \Carbon\Carbon::parse($tender->expired_at)->isPast(),
+                        'user_name' => $tender->user ? $tender->user->name : 'Unknown'
+                    ];
+                });
+
+            // Get expired tenders
+            $expiredTenders = Tender::where('expired_at', '<', now())
+                ->with(['user:user_id,name'])
+                ->select('tender_id as id', 'title', 'user_id', 'expired_at')
+                ->get()
+                ->map(function ($tender) {
+                    return [
+                        'id' => $tender->id,
+                        'title' => $tender->title,
+                        'company_name' => $tender->user ? $tender->user->name : 'Unknown',
+                        'expired_at' => $tender->expired_at
+                    ];
+                });
+
+            return response()->json([
+                'all_tenders' => $allTenders,
+                'expired_tenders' => $expiredTenders,
+                'current_time' => now()->toDateTimeString()
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ], 500);
+        }
+    }
 }

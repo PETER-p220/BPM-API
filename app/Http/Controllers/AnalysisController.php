@@ -194,6 +194,24 @@ public function ItemsDropdown(Request $request)
                 'all_data' => array_keys($request->all())
             ]);
 
+            // Check if user already has a pending analysis for this project
+            $existingAnalysis = Analysis::where('project_id', $request->project_id)
+                                    ->where('user_id', Auth::id())
+                                    ->whereIn('status', ['pending', 'approved'])
+                                    ->first();
+
+            if ($existingAnalysis) {
+                $message = $existingAnalysis->status === 'approved' 
+                    ? 'You already have an approved analysis for this project. Please contact admin if you need to make changes.'
+                    : 'You already have a pending analysis for this project. Please wait for admin approval before submitting a new one.';
+                
+                return response()->json([
+                    'status' => 422,
+                    'message' => $message,
+                    'existing_status' => $existingAnalysis->status
+                ], 422);
+            }
+
             // Temporarily remove mime validation to see what we get
             $request->validate([
                 'excel_file' => 'required|file|max:10240', // Removed mimes validation temporarily
@@ -692,6 +710,19 @@ public function updateFromExcel(Request $request)
         $projectId = $request->input('project_id');
         $file = $request->file('excel_file');
 
+        // Check if user has a pending analysis for this project
+        $existingAnalysis = Analysis::where('project_id', $projectId)
+                                ->where('user_id', Auth::id())
+                                ->where('status', 'pending')
+                                ->first();
+
+        if ($existingAnalysis) {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Cannot update analysis while it is pending approval. Please wait for admin approval first.'
+            ], 422);
+        }
+
         // Check if there are existing analyses for the project
         $existingAnalyses = Analysis::where('project_id', $projectId)->count();
         
@@ -803,6 +834,74 @@ public function updateFromExcel(Request $request)
         return response()->json([
             'status' => 500,
             'message' => 'Error updating analysis data',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
+/**
+ * Approve or reject a project analysis
+ */
+public function approveAnalysis(Request $request)
+{
+    try {
+        // Validate the request
+        $validatedData = $request->validate([
+            'project_id' => 'required|exists:projects,project_id',
+            'status' => 'required|in:approved,rejected',
+            'reason_for_reject' => 'nullable|required_if:status,rejected|string|max:500'
+        ]);
+
+        // Find all analyses for the project
+        $analyses = Analysis::where('project_id', $validatedData['project_id'])->get();
+
+        if ($analyses->isEmpty()) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'No analyses found for this project'
+            ], 404);
+        }
+
+        // Update all analyses for the project
+        foreach ($analyses as $analysis) {
+            $analysis->update([
+                'status' => $validatedData['status'],
+                'reason_for_reject' => $validatedData['status'] === 'rejected' 
+                    ? $validatedData['reason_for_reject'] 
+                    : null
+            ]);
+        }
+
+        // Log the approval/rejection
+        Log::info('Project analysis status updated', [
+            'user_id' => Auth::id(),
+            'project_id' => $validatedData['project_id'],
+            'status' => $validatedData['status'],
+            'reason_for_reject' => $validatedData['reason_for_reject'] ?? null
+        ]);
+
+        return response()->json([
+            'status' => 200,
+            'message' => "Project analysis {$validatedData['status']} successfully"
+        ], 200);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'status' => 422,
+            'message' => 'Validation failed',
+            'errors' => $e->errors()
+        ], 422);
+
+    } catch (\Exception $e) {
+        Log::error('Error approving project analysis', [
+            'error' => $e->getMessage(),
+            'user_id' => Auth::id(),
+            'project_id' => $request->input('project_id', 'unknown')
+        ]);
+
+        return response()->json([
+            'status' => 500,
+            'message' => 'Error updating project analysis status',
             'error' => $e->getMessage()
         ], 500);
     }

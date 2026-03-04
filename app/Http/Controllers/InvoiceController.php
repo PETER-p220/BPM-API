@@ -79,7 +79,6 @@ class InvoiceController extends Controller
             'company_name'     => 'nullable|string|max:255',
             'company_email'    => 'nullable|email|max:255',
             'company_phone'    => 'nullable|string|max:30',
-            'company_website'  => 'nullable|url|max:255',
             'company_tin'      => 'nullable|string|max:50',
             'company_vrn'      => 'nullable|string|max:50',
             'company_address'  => 'nullable|string|max:500',

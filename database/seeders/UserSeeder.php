@@ -16,6 +16,7 @@ class UserSeeder extends Seeder
      *   4 = tender
      *   5 = accountant
      *   6 = hr
+     *   7 = ceo/boss manager
      */
     public function run(): void
     {
@@ -80,6 +81,16 @@ class UserSeeder extends Seeder
                 'status'        => 'is_active',
             ],
 
+            // ── CEO/Boss Manager (role_id: 7) → CEOLayout / CEO Dashboard ───────
+            [
+                'name'          => 'CEO Manager',
+                'email'         => 'ceo@teratech.co.tz',
+                'password'      => Hash::make('12341234'),
+                'role_id'       => 7,
+                'department_id' => null,
+                'status'        => 'is_active',
+            ],
+
             // ── Inactive user (for testing locked accounts) ───────────────
             [
                 'name'          => 'Test Inactive User',
@@ -108,6 +119,7 @@ class UserSeeder extends Seeder
                 ['Tender (4)',      'tender@teratech.co.tz',          '12341234', '/tenders/dashboard'],
                 ['Accountant (5)',  'accountant@teratech.co.tz',      '12341234', '/accountDash'],
                 ['HR (6)',          'hr@teratech.co.tz',              '12341234', '/hrDash'],
+                ['CEO (7)',         'ceo@teratech.co.tz',             '12341234', '/ceo/dashboard'],
                 ['Inactive (3)',    'inactive@teratech.co.tz',        '12341234', 'login blocked'],
             ]
         );

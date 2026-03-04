@@ -646,6 +646,24 @@ public function storeCookies(Request $request)
         ], 500); // 500 Internal Server Error
     }
 }
+    /**
+     * Get all departments for dropdown
+     */
+    public function departments(Request $request)
+    {
+        try {
+            $departments = Department::orderBy('name')
+                         ->get(['department_id', 'name']);
+
+            return response()->json(['departments' => $departments], 200);
+        } catch (\Exception $e) {
+            // Log the error for debugging
+            \Log::error('Error fetching departments: ' . $e->getMessage());
+
+            // Return a JSON error response with HTTP status 500
+            return response()->json(['error' => 'Failed to fetch departments.'], 500);
+        }
+    }
 }
 
 

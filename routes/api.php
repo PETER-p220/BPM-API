@@ -18,6 +18,7 @@ use App\Http\Controllers\ChatController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\BudgetManagementController;
 use App\Http\Controllers\ProjectAnalysisController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\MeetingMinuteController;
@@ -27,6 +28,7 @@ use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\CookieController;
 use App\Http\Controllers\PriceScheduleController;
 use App\Http\Controllers\AnalysisController;
+use App\Http\Controllers\PerformanceController;
 use App\Http\Controllers\AwardLetterController;
 use App\Http\Controllers\InsuranceBondController;
 use App\Http\Controllers\SecurityDeclarationController;
@@ -36,7 +38,8 @@ use App\Http\Controllers\RequestForPurchaseController;
 use App\Http\Controllers\ExtendRequestController;
 use App\Http\Controllers\ContractController;
 use App\Http\Controllers\DashboardController;
-
+use App\Http\Controllers\TenderReportController;
+use App\Http\Controllers\SystemHealthController;
 
 // Public Routes
 Route::get('/login', function () {
@@ -58,6 +61,7 @@ Route::middleware(['auth:sanctum', 'token.expiration'])->group(function () {
 
 //user route
 Route::get('/all/users', [AuthController::class, 'users']);
+Route::get('/all/departments', [AuthController::class, 'departments']);
 Route::get('/users/byname', [AuthController::class, 'dropdownUsersByName']);
 Route::get('/users/byrole', [AuthController::class, 'dropdownUsersByRole']);
 Route::get('user/profile', [AuthController::class, 'getLoggedUserProfile']);
@@ -67,6 +71,30 @@ Route::get('/count/users', [AuthController::class, 'countUsers']);
     
 // Dashboard Routes
 Route::get('/dashboard/stats', [DashboardController::class, 'getDashboardStats']);
+Route::get('/dashboard/trends', [DashboardController::class, 'getTrends']);
+
+// Analytics Routes - Temporarily commented out as controller doesn't exist
+//Route::get('/analytics/metrics', [AnalyticsController::class, 'getExecutiveMetrics']);
+//Route::get('/analytics/revenue', [AnalyticsController::class, 'getRevenueAnalytics']);
+//Route::get('/analytics/budget', [AnalyticsController::class, 'getBudgetAnalytics']);
+//Route::get('/analytics/performance', [AnalyticsController::class, 'getPerformanceScorecards']);
+//Route::get('/analytics/risk', [AnalyticsController::class, 'getRiskAssessment']);
+//Route::post('/analytics/reports/generate', [AnalyticsController::class, 'generateReport']);
+
+// Budget Management Routes
+Route::get('/budget/overview', [BudgetManagementController::class, 'getBudgetOverview']);
+Route::post('/budget/create', [BudgetManagementController::class, 'createBudget']);
+Route::get('/budget/pending', [BudgetManagementController::class, 'getPendingBudgets']);
+Route::post('/budget/{budgetId}/approve', [BudgetManagementController::class, 'approveBudget']);
+Route::post('/budget/{budgetId}/reject', [BudgetManagementController::class, 'rejectBudget']);
+Route::get('/budget/my-budgets', [BudgetManagementController::class, 'getMyBudgets']);
+Route::get('/budget/transactions', [BudgetManagementController::class, 'getBudgetTransactions']);
+Route::get('/budget/variance', [BudgetManagementController::class, 'getVarianceAnalysis']);
+Route::get('/budget/alerts', [BudgetManagementController::class, 'getBudgetAlerts']);
+Route::post('/budget/reports/generate', [BudgetManagementController::class, 'generateBudgetReport']);
+
+// System Health Routes
+Route::get('/system/health', [SystemHealthController::class, 'getSystemHealth']);
 
 Route::get('/count/requests', [RequestForProjectController::class, 'countRequests']);
 Route::get('/count/user/requests/approved', [RequestForProjectController::class, 'countApprovedRequests']);
@@ -101,8 +129,9 @@ Route::apiResource('/departments', DepartmentController::class);
 Route::get('/dropdown/department', [DepartmentController::class, 'departmentByDropDown']);
 Route::get('/count/departments', [DepartmentController::class, 'countDepartments']);
 
-
 //tenders route
+Route::get('/tenders/available-for-reporting', [TenderController::class, 'availableForReporting']);
+Route::get('/tenders/debug-available', [TenderController::class, 'debugAvailableTenders']);
 Route::apiResource('/tenders', TenderController::class);
 Route::get('dropdown/tender', [TenderController::class, 'tenderDropDown']);
 Route::get('/count/registered-tenders', [TenderController::class, 'countTenders']);
@@ -119,7 +148,7 @@ Route::get('/tender/types/for-assignedtenders', [AssignTenderController::class, 
 Route::get('/count/all-assigned/tenders', [AssignTenderController::class, 'countAllAssignedTenders']);
 Route::get('/count/on-progress/tender', [AssignTenderController::class, 'countOnProgressTenders']);
 Route::get('/count/expire-tenders', [AssignTenderController::class, 'countExipredTenders']);
-Route::get('/count/deadline-reached/tenders', [AssignTenderController::class, 'countDealineReachedTenders']);
+Route::get('/count/deadline-reached/tenders', [AssignTenderController::class, 'countDeadlineReachedTenders']);
 
 
 Route::get('/count/all/on-progress-tenders', [AssignTenderController::class, 'countAllOnProgressTenders']);
@@ -157,6 +186,7 @@ Route::resource('appointment-letter', AppointmentLetterController::class)->excep
 Route::get('logged-user-appointment-letters', [AppointmentLetterController::class, 'loggedUserAppointmentLetter']);
 Route::post('appointment-letter/{letter_id}/accept', [AppointmentLetterController::class, 'accept']);
 Route::post('appointment-letter/{letter_id}/reject', [AppointmentLetterController::class, 'reject']);
+
 
 
 //extention  for project
@@ -219,8 +249,6 @@ Route::post('/hod/tender/update', [TenderController::class, 'update']);
 Route::post('/hod/tender/approve', [TenderController::class, 'approveTender']);
 Route::post('/hod/tender/reject', [TenderController::class, 'rejectTender']);
 
-
-
 //analysis route
 Route::apiResource('analysis', AnalysisController::class);
 Route::post('/approve-analysis', [AnalysisController::class, 'approveAnalysis']);
@@ -229,6 +257,11 @@ Route::get('/items-dropdown', [AnalysisController::class, 'ItemsDropdown']);
 Route::get('/logged/user-analyses/count', [AnalysisController::class, 'countUserAnalyses']);
 Route::get('/user-analyses/approved/count', [AnalysisController::class, 'countApprovedUserAnalyses']);
 Route::get('/user-analyses/rejected/count', [AnalysisController::class, 'countRejectedUserAnalyses']);
+
+// Budget Management Routes
+Route::get('/budget/reductions', [BudgetController::class, 'getBudgetReductions']);
+Route::get('/budget/reduction/{project_id}', [BudgetController::class, 'getProjectBudgetReduction']);
+Route::get('/budget/overview', [BudgetController::class, 'getBudgetOverview']);
 
 // update analysis
 Route::post('/analysis/update-from-excel', [AnalysisController::class, 'updateFromExcel']);
@@ -240,7 +273,7 @@ Route::get('user-schedule', [PriceScheduleController::class, 'userSchedule']);
 Route::get('/user/price-schedules/count', [PriceScheduleController::class, 'countSubmittedPriceSchedules']);
 Route::get('/user/price-schedules/passed/count', [PriceScheduleController::class, 'countApprovedPriceSchedules']);
 Route::get('/user/price-schedules/rejected/count', [PriceScheduleController::class, 'countRejectedPriceSchedules']);
-
+Route::delete('/price-schedules/{tender_id}', [PriceScheduleController::class, 'destroy']);
 
 //award  routes
 Route::resource('intention-to-award', IntentionToAwardController::class);
@@ -335,4 +368,148 @@ Route::resource('receipts', ReceiptController::class);
     Route::match(['get', 'options'], '/accountant/invoices/export/excel', [InvoiceController::class, 'exportInvoicesToExcel']);
     Route::match(['get', 'options'], '/accountant/invoices/export/pdf', [InvoiceController::class, 'exportInvoicesToPDF']);
     Route::match(['get', 'options'], '/accountant/invoices/{id}/download', [InvoiceController::class, 'downloadInvoice']);
+
+    // Test endpoints (remove in production)
+    Route::get('/test/budget', function() {
+        try {
+            // Test users table
+            $users = User::limit(5)->get(['user_id', 'name', 'department_id']);
+            
+            // Test budget allocations table
+            $budgets = BudgetAllocation::limit(5)->get();
+            
+            return response()->json([
+                'status' => 'success',
+                'users_count' => $users->count(),
+                'budgets_count' => $budgets->count(),
+                'sample_users' => $users,
+                'sample_budgets' => $budgets
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    });
+
+    Route::get('/test/budget/create', function(Request $request) {
+        try {
+            // Test budget creation without authentication
+            $budget = BudgetAllocation::create([
+                'department_id' => '1', // sample user_id
+                'allocated_amount' => 1000000,
+                'spent_amount' => 0,
+                'period' => 'monthly',
+                'description' => 'Test budget',
+                'fiscal_year' => '2026',
+                'status' => 'pending',
+                'created_by' => 1, // sample user_id
+                'approved_by' => null,
+                'approved_at' => null,
+                'rejection_reason' => null
+            ]);
+            
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Test budget created',
+                'budget' => $budget
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    });
+
+    // Test endpoints (remove in production)
+    Route::get('/test/budget', function() {
+        try {
+            // Test users table
+            $users = User::limit(5)->get(['user_id', 'name', 'department_id']);
+            
+            // Test budget allocations table
+            $budgets = BudgetAllocation::limit(5)->get();
+            
+            return response()->json([
+                'status' => 'success',
+                'users_count' => $users->count(),
+                'budgets_count' => $budgets->count(),
+                'sample_users' => $users,
+                'sample_budgets' => $budgets
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    });
+
+    Route::get('/test/budget/create', function(Request $request) {
+        try {
+            // Test budget creation without authentication
+            $budget = BudgetAllocation::create([
+                'department_id' => '1', // sample user_id
+                'allocated_amount' => 1000000,
+                'spent_amount' => 0,
+                'period' => 'monthly',
+                'description' => 'Test budget',
+                'fiscal_year' => '2026',
+                'status' => 'pending',
+                'created_by' => 1, // sample user_id
+                'approved_by' => null,
+                'approved_at' => null,
+                'rejection_reason' => null
+            ]);
+            
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Test budget created',
+                'budget' => $budget
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    });
+
+    // Performance Management
+    Route::resource('performance/evaluations', \App\Http\Controllers\PerformanceController::class)->except(['create', 'edit']);
+    Route::get('performance/statistics', [\App\Http\Controllers\PerformanceController::class, 'getStatistics']);
+    Route::get('performance/employee/{employeeId}', [\App\Http\Controllers\PerformanceController::class, 'getEmployeePerformance']);
+    
+    // Performance routes for CEO and Admin
+    Route::get('ceo/performance/evaluations', [\App\Http\Controllers\PerformanceController::class, 'ceoIndex']);
+    Route::get('admin/performance/evaluations', [\App\Http\Controllers\PerformanceController::class, 'adminIndex']);
+    Route::post('performance/auto-calculate', [\App\Http\Controllers\PerformanceController::class, 'autoCalculatePerformance']);
+    
+    // Leave Management routes
+    Route::get('leaves', [\App\Http\Controllers\LeaveController::class, 'index']);
+    Route::post('leaves', [\App\Http\Controllers\LeaveController::class, 'store']);
+    Route::get('leaves/{id}', [\App\Http\Controllers\LeaveController::class, 'show']);
+    Route::put('leaves/{id}', [\App\Http\Controllers\LeaveController::class, 'update']);
+    Route::delete('leaves/{id}', [\App\Http\Controllers\LeaveController::class, 'destroy']);
+    Route::post('leaves/{id}/approve', [\App\Http\Controllers\LeaveController::class, 'approve']);
+    Route::post('leaves/{id}/reject', [\App\Http\Controllers\LeaveController::class, 'reject']);
+    Route::get('leaves/statistics', [\App\Http\Controllers\LeaveController::class, 'statistics']);
+    
+    // Test endpoint for debugging
+    Route::get('test/auth', function() {
+        $user = Auth::user();
+        return response()->json([
+            'authenticated' => true,
+            'user_id' => $user ? $user->user_id : null,
+            'role_id' => $user ? $user->role_id : null,
+            'name' => $user ? $user->name : null
+        ]);
+    });
+
+    // Tender Reports Routes
+    Route::get('/tender-reports/non-awarded', [TenderReportController::class, 'index']);
+    Route::apiResource('/tender-reports', TenderReportController::class);
+    Route::get('/tender-reports/{id}/document', [TenderReportController::class, 'downloadDocument']);
 });

@@ -425,7 +425,7 @@ public function countAllExpiredTenders()
 
 
 // Count assigned tenders that will reach their deadline within three days
-public function countDealineReachedTenders()
+public function countDeadlineReachedTenders()
 {
     $userId = auth()->id(); // Get logged-in user ID
 
