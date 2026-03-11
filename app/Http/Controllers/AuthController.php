@@ -108,7 +108,11 @@ public function login(Request $request)
     }
 
     try {
-        // Create token with an expiration time of 8 hours
+        // Delete all old tokens for this user to prevent token accumulation
+        // This prevents the middleware from checking wrong tokens
+        $user->tokens()->delete();
+        
+        // Create new token with an expiration time of 8 hours
         $token = $user->createToken('authToken', [], Carbon::now()->addHours(8))->plainTextToken;
 
         // Log the login activity to the audit_trail table

@@ -41,7 +41,7 @@ class TenderReportController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'tender_id' => 'required|exists:tenders,id',
+            'tender_id' => 'required|exists:tenders,tender_id',
             'report_type' => 'required|in:technical,financial,compliance,documentation,other',
             'reason' => 'required|string|min:10',
             'recommendations' => 'nullable|string',

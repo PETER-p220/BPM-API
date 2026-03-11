@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Exception;
 
-class ExtendRequestController extends Controller
+class ExtendRequestController extends Controller           
 {
     public function __construct()
     {

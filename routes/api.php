@@ -40,6 +40,10 @@ use App\Http\Controllers\ContractController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\TenderReportController;
 use App\Http\Controllers\SystemHealthController;
+use App\Http\Controllers\LeaveController;
+use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\FinancialController;
+use App\Http\Controllers\FinancialMaintenanceController;
 
 // Public Routes
 Route::get('/login', function () {
@@ -56,8 +60,29 @@ Route::post('/auth/request-reset', [PasswordResetController::class, 'requestPass
 Route::post('/auth/password-reset', [PasswordResetController::class, 'resetPassword']);
 Route::post('/accept-cookies', [CookieController::class, 'acceptCookies']);
 
+// Test endpoint for CORS debugging
+Route::get('/test-cors', function () {
+    return response()->json([
+        'message' => 'CORS test successful',
+        'timestamp' => now()->toDateTimeString(),
+        'origin' => request()->header('Origin')
+    ]);
+});
+
+// Test financial stats route
+Route::get('/test-financial-stats', function () {
+    $user = auth()->user();
+    return response()->json([
+        'message' => 'Financial stats route test',
+        'authenticated' => !!$user,
+        'user_id' => $user ? $user->user_id : null,
+        'role_id' => $user ? $user->role_id : null,
+        'timestamp' => now()->toDateTimeString()
+    ]);
+});
+
 // Protected Routes
-Route::middleware(['auth:sanctum', 'token.expiration'])->group(function () {
+Route::middleware(['auth:sanctum'])->group(function () {
 
 //user route
 Route::get('/all/users', [AuthController::class, 'users']);
@@ -73,13 +98,16 @@ Route::get('/count/users', [AuthController::class, 'countUsers']);
 Route::get('/dashboard/stats', [DashboardController::class, 'getDashboardStats']);
 Route::get('/dashboard/trends', [DashboardController::class, 'getTrends']);
 
-// Analytics Routes - Temporarily commented out as controller doesn't exist
-//Route::get('/analytics/metrics', [AnalyticsController::class, 'getExecutiveMetrics']);
-//Route::get('/analytics/revenue', [AnalyticsController::class, 'getRevenueAnalytics']);
-//Route::get('/analytics/budget', [AnalyticsController::class, 'getBudgetAnalytics']);
-//Route::get('/analytics/performance', [AnalyticsController::class, 'getPerformanceScorecards']);
-//Route::get('/analytics/risk', [AnalyticsController::class, 'getRiskAssessment']);
-//Route::post('/analytics/reports/generate', [AnalyticsController::class, 'generateReport']);
+// Analytics Routes
+Route::get('/analytics/metrics', [AnalyticsController::class, 'getExecutiveMetrics']);
+Route::get('/analytics/revenue', [AnalyticsController::class, 'getRevenueAnalytics']);
+Route::get('/analytics/budget', [AnalyticsController::class, 'getBudgetAnalytics']);
+Route::get('/analytics/performance', [AnalyticsController::class, 'getPerformanceScorecards']);
+Route::get('/analytics/risk', [AnalyticsController::class, 'getRiskAssessment']);
+Route::post('/analytics/reports/generate', [AnalyticsController::class, 'generateReport']);
+
+// Budget Analytics Routes (additional routes for CEO dashboard)
+Route::get('/budget/analytics', [AnalyticsController::class, 'getBudgetAnalytics']);
 
 // Budget Management Routes
 Route::get('/budget/overview', [BudgetManagementController::class, 'getBudgetOverview']);
@@ -110,7 +138,6 @@ Route::delete('/auth/user/{user_id}', [AuthController::class, 'deleteUser']);
 Route::get('/audit-trail', [AuthController::class, 'getAuditTrail']);
 Route::post('/store-cookies', [AuthController::class, 'storeCookies']);
     
-
 //admin,hod,account and engineers rout drop dropdown
 Route::get('/dropdown/hod', [AuthController::class, 'HodDropDown']);
 Route::get('/dropdown/engineer', [AuthController::class, 'EngineersDropDown']);
@@ -118,11 +145,9 @@ Route::get('/dropdown/accountants', [AuthController::class, 'AccountantsDropDown
 Route::get('/dropdown/admin', [AuthController::class, 'AdminsDropDown']);
 Route::get('/admin-dropdown', [AuthController::class, 'AdminDropDown']);
 
-
 //roles route
 Route::apiResource('/auth/roles', RoleController::class);
 Route::get('/count/roles', [RoleController::class, 'countRoles']);
-
 
 //department Route
 Route::apiResource('/departments', DepartmentController::class);
@@ -138,7 +163,6 @@ Route::get('/count/registered-tenders', [TenderController::class, 'countTenders'
 Route::get('/reportTenders', [TenderController::class, 'getTenderReport']);
 Route::get('/types/tenders', [TenderController::class, 'getAllTenderTypes']);
 
-
 //assign tender route
 Route::apiResource('/assign/tender', AssignTenderController::class);
  Route::get('/your/tender', [AssignTenderController::class, 'yourTender']);
@@ -149,7 +173,6 @@ Route::get('/count/all-assigned/tenders', [AssignTenderController::class, 'count
 Route::get('/count/on-progress/tender', [AssignTenderController::class, 'countOnProgressTenders']);
 Route::get('/count/expire-tenders', [AssignTenderController::class, 'countExipredTenders']);
 Route::get('/count/deadline-reached/tenders', [AssignTenderController::class, 'countDeadlineReachedTenders']);
-
 
 Route::get('/count/all/on-progress-tenders', [AssignTenderController::class, 'countAllOnProgressTenders']);
 Route::get('/count/all/deadline-reached-tenders', [AssignTenderController::class, 'countAllDeadlineReachedTenders']);
@@ -167,7 +190,6 @@ Route::get('/count/submitted/tender', [TenderDocSubmissionController::class, 'co
 Route::get('/awarded-tender', [AwardedTenderController::class, 'index']);
 Route::get('/count/awarded-tenders', [AwardedTenderController::class, 'countAwardedTenders']);
 
-
 //projects Routes
 Route::resource('/projects', ProjectController::class);
 Route::get('/dropdown/projects', [ProjectController::class, 'allProjectsDropDown']);
@@ -180,14 +202,11 @@ Route::get('/count/total-budget', [ProjectController::class, 'countTotalBudget']
 Route::get('/reports-for/projects', [ProjectController::class, 'getProjectsReports']);
 Route::get('/count/all/on-progress/projects', [ProjectController::class, 'countAllOnProgressProjects']);
 
-
 //apointment lettter
 Route::resource('appointment-letter', AppointmentLetterController::class)->except(['create', 'edit']);
 Route::get('logged-user-appointment-letters', [AppointmentLetterController::class, 'loggedUserAppointmentLetter']);
 Route::post('appointment-letter/{letter_id}/accept', [AppointmentLetterController::class, 'accept']);
 Route::post('appointment-letter/{letter_id}/reject', [AppointmentLetterController::class, 'reject']);
-
-
 
 //extention  for project
 Route::resource('project-extension', ProjectExtensionController::class);
@@ -227,7 +246,6 @@ Route::get('/count/user-projects/budget', [ProjectController::class, 'countUserT
 // Route for fetching all projects for a specific user by user_id
 Route::get('/users-with-project-summary', [ProjectController::class, 'usersWithProjectSummary']);
 
-
 //Hod routes
 Route::get('/hod/projects', [ProjectController::class, 'hodProjects']);
 Route::get('/hod/project/{project_id}', [ProjectController::class, 'hodProjectDetails']);
@@ -259,9 +277,9 @@ Route::get('/user-analyses/approved/count', [AnalysisController::class, 'countAp
 Route::get('/user-analyses/rejected/count', [AnalysisController::class, 'countRejectedUserAnalyses']);
 
 // Budget Management Routes
-Route::get('/budget/reductions', [BudgetController::class, 'getBudgetReductions']);
-Route::get('/budget/reduction/{project_id}', [BudgetController::class, 'getProjectBudgetReduction']);
-Route::get('/budget/overview', [BudgetController::class, 'getBudgetOverview']);
+Route::get('/budget/reductions', [BudgetManagementController::class, 'getBudgetReductions']);
+Route::get('/budget/reduction/{project_id}', [BudgetManagementController::class, 'getProjectBudgetReduction']);
+Route::get('/budget/overview', [BudgetManagementController::class, 'getBudgetOverview']);
 
 // update analysis
 Route::post('/analysis/update-from-excel', [AnalysisController::class, 'updateFromExcel']);
@@ -283,8 +301,6 @@ Route::get('/intention-reports', [IntentionToAwardController::class, 'IntentionR
 Route::resource('award-letter', AwardLetterController::class)->except(['create', 'edit']);
 Route::get('logged-user-award-letters', [AwardLetterController::class, 'loggedUserAwardLetter']);
 Route::get('awards-reports', [AwardLetterController::class, 'AwardsReports']);
-
-
 
 //perfomance  bond
 Route::resource('insurance-bond', InsuranceBondController::class)->except(['create', 'edit']);
@@ -350,7 +366,7 @@ Route::resource('receipts', ReceiptController::class);
     
    Route::get('/contracts', [ContractController::class, 'index'])->name('contracts.index');
     Route::get('/contracts/yours', [ContractController::class, 'yourContracts'])->name('contracts.yours');
-    Route::post('/contracts', [ContractController::class, 'store'])->name('contracts.store');
+    Route::post('/contracts', [ContractController::class, 'store']);
     Route::get('/contracts/{contract_id}', [ContractController::class, 'show'])->name('contracts.show');
     Route::put('/contracts/{contract_id}', [ContractController::class, 'update'])->name('contracts.update');
     Route::delete('/contracts/{contract_id}', [ContractController::class, 'destroy'])->name('contracts.destroy');
@@ -490,12 +506,12 @@ Route::resource('receipts', ReceiptController::class);
     // Leave Management routes
     Route::get('leaves', [\App\Http\Controllers\LeaveController::class, 'index']);
     Route::post('leaves', [\App\Http\Controllers\LeaveController::class, 'store']);
+    Route::get('leaves/statistics', [\App\Http\Controllers\LeaveController::class, 'statistics']);
     Route::get('leaves/{id}', [\App\Http\Controllers\LeaveController::class, 'show']);
     Route::put('leaves/{id}', [\App\Http\Controllers\LeaveController::class, 'update']);
     Route::delete('leaves/{id}', [\App\Http\Controllers\LeaveController::class, 'destroy']);
     Route::post('leaves/{id}/approve', [\App\Http\Controllers\LeaveController::class, 'approve']);
     Route::post('leaves/{id}/reject', [\App\Http\Controllers\LeaveController::class, 'reject']);
-    Route::get('leaves/statistics', [\App\Http\Controllers\LeaveController::class, 'statistics']);
     
     // Test endpoint for debugging
     Route::get('test/auth', function() {
@@ -512,4 +528,34 @@ Route::resource('receipts', ReceiptController::class);
     Route::get('/tender-reports/non-awarded', [TenderReportController::class, 'index']);
     Route::apiResource('/tender-reports', TenderReportController::class);
     Route::get('/tender-reports/{id}/document', [TenderReportController::class, 'downloadDocument']);
+
+    // Financial Management Routes
+    Route::get('/financial/records', [FinancialController::class, 'index']);
+    Route::post('/financial/records', [FinancialController::class, 'store']);
+    Route::get('/financial/records/{id}', [FinancialController::class, 'show']);
+    Route::put('/financial/records/{id}', [FinancialController::class, 'update']);
+    Route::delete('/financial/records/{id}', [FinancialController::class, 'destroy']);
+    Route::get('/financial/records/stats', [FinancialController::class, 'getStats']);     
+    Route::get('/financial/records/export', [FinancialController::class, 'export']);
+
+    // Financial Maintenance Routes
+    Route::get('/financial/maintenance/status', [FinancialMaintenanceController::class, 'getSystemStatus']);
+    Route::post('/financial/maintenance/run', [FinancialMaintenanceController::class, 'runMaintenance']);
+    Route::get('/financial/maintenance/tasks', [FinancialMaintenanceController::class, 'getAutomatedTasks']);
+    Route::put('/financial/maintenance/tasks/{id}', [FinancialMaintenanceController::class, 'toggleTask']);
+    Route::post('/financial/maintenance/tasks/{id}/run', [FinancialMaintenanceController::class, 'runManualTask']);
+    Route::get('/financial/maintenance/logs', [FinancialMaintenanceController::class, 'getLogs']);
+    Route::delete('/financial/maintenance/logs', [FinancialMaintenanceController::class, 'clearLogs']);
+
+    // CEO Financial Routes
+    Route::get('/ceo/financial/records', [FinancialController::class, 'ceoIndex']);
+    Route::get('/ceo/financial/records/stats', [FinancialController::class, 'ceoStats']);
+    Route::get('/ceo/financial/records/export/pdf', [FinancialController::class, 'exportPdf']);
+    Route::get('/ceo/financial/records/export/excel', [FinancialController::class, 'exportExcel']);
+
+    // Admin Financial Routes  
+    Route::get('/admin/financial/records', [FinancialController::class, 'adminIndex']);
+    Route::get('/admin/financial/records/stats', [FinancialController::class, 'adminStats']);
+    Route::get('/admin/financial/records/export/pdf', [FinancialController::class, 'exportPdf']);
+    Route::get('/admin/financial/records/export/excel', [FinancialController::class, 'exportExcel']);
 });

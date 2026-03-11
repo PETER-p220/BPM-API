@@ -11,7 +11,7 @@ class ProjectAnalysis extends Model
 
     protected $primaryKey = 'project_analysis_id';
 
-     protected $table = 'project_analyses';
+     protected $table = 'analyses';
 
     protected $fillable = [
         'tender_id',

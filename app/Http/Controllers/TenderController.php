@@ -437,7 +437,8 @@ class TenderController extends Controller
                 ->get()
                 ->map(function ($tender) {
                     return [
-                        'id' => $tender->id,
+                        'id' => $tender->id,  // Use the aliased 'id' field
+                        'tender_id' => $tender->id,  // Also include tender_id for compatibility
                         'title' => $tender->title,
                         'company_name' => $tender->user ? $tender->user->name : 'Unknown',
                         'expired_at' => $tender->expired_at
@@ -468,7 +469,7 @@ class TenderController extends Controller
                 ->get()
                 ->map(function ($tender) {
                     return [
-                        'tender_id' => $tender->tender_id,
+                        'id' => $tender->tender_id,
                         'title' => $tender->title,
                         'expired_at' => $tender->expired_at,
                         'is_expired' => \Carbon\Carbon::parse($tender->expired_at)->isPast(),
@@ -483,7 +484,7 @@ class TenderController extends Controller
                 ->get()
                 ->map(function ($tender) {
                     return [
-                        'id' => $tender->id,
+                        'id' => $tender->tender_id,
                         'title' => $tender->title,
                         'company_name' => $tender->user ? $tender->user->name : 'Unknown',
                         'expired_at' => $tender->expired_at

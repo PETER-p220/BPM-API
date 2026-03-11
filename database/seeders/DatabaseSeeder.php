@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
         \Database\Seeders\RoleSeeder::class,
         \Database\Seeders\DepartmentSeeder::class,
         \Database\Seeders\UserSeeder::class,
+        \Database\Seeders\AutomatedTaskSeeder::class,
     ]);
     }
 }
