@@ -16,6 +16,18 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'phone',
+        'salary',
+        'hire_date',
+        'address',
+        'emergency_contact',
+        'emergency_phone',
+        'birth_date',
+        'gender',
+        'national_id',
+        'bank_account',
+        'bank_name',
+        'notes',
         'role_id',
         'department_id',
         'status',
@@ -32,6 +44,9 @@ class User extends Authenticatable
         'department_id' => 'integer',
         'user_id' => 'integer',
         'email_verified_at' => 'datetime',
+        'salary' => 'decimal:2',
+        'hire_date' => 'date',
+        'birth_date' => 'date',
     ];
 
     // Relationships

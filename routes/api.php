@@ -44,6 +44,7 @@ use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\FinancialController;
 use App\Http\Controllers\FinancialMaintenanceController;
+use App\Http\Controllers\API\EmployeeController;
 
 // Public Routes
 Route::get('/login', function () {
@@ -542,20 +543,18 @@ Route::resource('receipts', ReceiptController::class);
     Route::get('/financial/maintenance/status', [FinancialMaintenanceController::class, 'getSystemStatus']);
     Route::post('/financial/maintenance/run', [FinancialMaintenanceController::class, 'runMaintenance']);
     Route::get('/financial/maintenance/tasks', [FinancialMaintenanceController::class, 'getAutomatedTasks']);
-    Route::put('/financial/maintenance/tasks/{id}', [FinancialMaintenanceController::class, 'toggleTask']);
-    Route::post('/financial/maintenance/tasks/{id}/run', [FinancialMaintenanceController::class, 'runManualTask']);
-    Route::get('/financial/maintenance/logs', [FinancialMaintenanceController::class, 'getLogs']);
-    Route::delete('/financial/maintenance/logs', [FinancialMaintenanceController::class, 'clearLogs']);
-
-    // CEO Financial Routes
-    Route::get('/ceo/financial/records', [FinancialController::class, 'ceoIndex']);
-    Route::get('/ceo/financial/records/stats', [FinancialController::class, 'ceoStats']);
-    Route::get('/ceo/financial/records/export/pdf', [FinancialController::class, 'exportPdf']);
-    Route::get('/ceo/financial/records/export/excel', [FinancialController::class, 'exportExcel']);
-
     // Admin Financial Routes  
     Route::get('/admin/financial/records', [FinancialController::class, 'adminIndex']);
     Route::get('/admin/financial/records/stats', [FinancialController::class, 'adminStats']);
     Route::get('/admin/financial/records/export/pdf', [FinancialController::class, 'exportPdf']);
     Route::get('/admin/financial/records/export/excel', [FinancialController::class, 'exportExcel']);
+
+    // Employee Management Routes
+    Route::get('/employees', [EmployeeController::class, 'index']);
+    Route::post('/employees', [EmployeeController::class, 'store']);
+    Route::get('/employees/statistics', [EmployeeController::class, 'statistics']);
+    Route::get('/employees/export', [EmployeeController::class, 'export']);
+    Route::get('/employees/{id}', [EmployeeController::class, 'show']);
+    Route::put('/employees/{id}', [EmployeeController::class, 'update']);
+    Route::delete('/employees/{id}', [EmployeeController::class, 'destroy']);
 });
