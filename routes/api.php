@@ -45,6 +45,7 @@ use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\FinancialController;
 use App\Http\Controllers\FinancialMaintenanceController;
 use App\Http\Controllers\API\EmployeeController;
+use App\Http\Controllers\API\ComplianceController;
 
 // Public Routes
 Route::get('/login', function () {
@@ -557,4 +558,15 @@ Route::resource('receipts', ReceiptController::class);
     Route::get('/employees/{id}', [EmployeeController::class, 'show']);
     Route::put('/employees/{id}', [EmployeeController::class, 'update']);
     Route::delete('/employees/{id}', [EmployeeController::class, 'destroy']);
+
+    // Compliance Routes
+    Route::get('/compliance/submissions', [ComplianceController::class, 'index']);
+    Route::post('/compliance/submissions', [ComplianceController::class, 'store']);
+    Route::get('/compliance/submissions/{id}', [ComplianceController::class, 'show']);
+    Route::put('/compliance/submissions/{id}', [ComplianceController::class, 'update']);
+    Route::delete('/compliance/submissions/{id}', [ComplianceController::class, 'destroy']);
+    Route::post('/compliance/submissions/{id}/review', [ComplianceController::class, 'review']);
+    Route::get('/compliance/statistics', [ComplianceController::class, 'statistics']);
+    Route::get('/compliance/submissions/export', [ComplianceController::class, 'export']);
+    Route::get('/compliance/submissions/{submissionId}/attachments/{attachmentId}/download', [ComplianceController::class, 'downloadAttachment']);
 });
