@@ -56,12 +56,17 @@ public function index()
 
 public function yourSubmission()
 {
-    $submissions = TenderDocSubmission::with([
+    $query = TenderDocSubmission::with([
         'user:user_id,name',
         'tender:tender_id,tender_number,title'
     ])
-    ->orderBy('submission_id', 'desc') // Order by submission_id in descending order
-    ->get();
+    ->orderBy('submission_id', 'desc');
+
+    if (Auth::id() && Auth::user()?->role_id === 3) {
+        $query->where('user_id', Auth::id());
+    }
+
+    $submissions = $query->get();
 
     return response()->json([
         'status' => true,
@@ -77,6 +82,7 @@ public function store(Request $request)
         $validator = Validator::make($request->all(), [
             'tender_id' => 'required|exists:tenders,tender_id',
             'submission_document' => 'required|mimes:pdf|max:2048',
+            'qualifications' => 'nullable|string|max:2000',
         ]);
 
         if ($validator->fails()) {
@@ -108,6 +114,18 @@ public function store(Request $request)
                 'status' => false,
                 'message' => 'Tender already submitted'
             ], 400);
+        }
+
+        $assignmentExists = DB::table('assign_tenders')
+            ->where('tender_id', $request->tender_id)
+            ->where('user_id', $userId)
+            ->exists();
+
+        if (!$assignmentExists) {
+            return response()->json([
+                'status' => false,
+                'message' => 'You can only submit tenders assigned to you'
+            ], 403);
         }
 
         // Verify tender expiration
@@ -144,6 +162,7 @@ public function store(Request $request)
             'tender_id' => $request->tender_id,
             'user_id' => $userId,
             'submission_document' => $submissionDocumentUrl,
+            'qualifications' => $request->qualifications,
             'is_submitted' => 'submitted'
         ]);
 
@@ -458,4 +477,3 @@ public function countHodSubmittedTenders()
 
 
 }
-

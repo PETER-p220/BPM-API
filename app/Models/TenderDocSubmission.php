@@ -16,6 +16,7 @@ class TenderDocSubmission extends Model
         'tender_id',
         'user_id',
         'submission_document',
+        'qualifications',
         'is_submitted'
     
     ];
