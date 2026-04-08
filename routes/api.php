@@ -46,6 +46,9 @@ use App\Http\Controllers\FinancialController;
 use App\Http\Controllers\FinancialMaintenanceController;
 use App\Http\Controllers\API\EmployeeController;
 use App\Http\Controllers\API\ComplianceController;
+use App\Http\Controllers\TeraInviteController;
+use App\Http\Controllers\TeraPOSController;
+use App\Http\Controllers\FinancialRecordsController;
 
 // Public Routes
 Route::get('/login', function () {
@@ -570,3 +573,16 @@ Route::resource('receipts', ReceiptController::class);
     Route::get('/compliance/submissions/export', [ComplianceController::class, 'export']);
     Route::get('/compliance/submissions/{submissionId}/attachments/{attachmentId}/download', [ComplianceController::class, 'downloadAttachment']);
 });
+
+
+// Tera other systems
+
+Route::get('/tera-invites/overview', [TeraInviteController::class, 'overview'])
+     ->name('tera-invites.overview');
+
+Route::get('/tera-pos/overview', [TeraPOSController::class, 'overview'])
+     ->name('tera-pos.overview');
+
+// CEO Financial Records API Routes
+Route::get('/ceo/financial/records', [FinancialRecordsController::class, 'index']);
+Route::get('/ceo/financial/records/stats', [FinancialRecordsController::class, 'stats']);
