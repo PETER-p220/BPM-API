@@ -117,18 +117,37 @@ class ReceiptController extends Controller
 
     /**
      * Display all receipts, including user name.
+     * Also includes financial records that have a receipt file attached.
      */
     public function index()
     {
         try {
-            $receipts = Receipt::join('users', 'receipts.user_id', '=', 'users.user_id')  // Join with users table
-                                ->select('receipts.*', 'users.name as user_name') // Fetch receipts with user name
-                                ->get();
+            $receipts = Receipt::join('users', 'receipts.user_id', '=', 'users.user_id')
+                                ->select('receipts.*', 'users.name as user_name')
+                                ->get()
+                                ->map(function ($r) { $r->source = 'receipt'; return $r; });
+
+            $financialReceipts = DB::table('financial_records')
+                ->join('users', 'financial_records.created_by', '=', 'users.user_id')
+                ->whereNotNull('financial_records.receipt_file')
+                ->whereNull('financial_records.deleted_at')
+                ->select(
+                    DB::raw('financial_records.id as receipt_id'),
+                    DB::raw('financial_records.created_by as user_id'),
+                    DB::raw('users.name as user_name'),
+                    DB::raw("COALESCE(financial_records.description, CONCAT(financial_records.type, ' - ', financial_records.category)) as description"),
+                    DB::raw('financial_records.receipt_file'),
+                    DB::raw('financial_records.created_at'),
+                    DB::raw("'financial_record' as source")
+                )
+                ->get();
+
+            $allReceipts = $receipts->toBase()->merge($financialReceipts);
 
             return response()->json([
                 'status' => true,
                 'message' => 'Receipts fetched successfully.',
-                'data' => $receipts
+                'data' => $allReceipts
             ], 200);
         } catch (Exception $e) {
             return response()->json([
@@ -141,23 +160,41 @@ class ReceiptController extends Controller
 
     /**
      * Fetch all receipts for the logged-in user.
+     * Also includes the user's financial records that have a receipt file attached.
      */
     public function userReceipts()
     {
         try {
-            // Get logged-in user ID
-            $userId = Auth::user()->user_id; // Ensure this matches your database column
-    
-            // Fetch receipts only for the logged-in user, including their name
-            $userReceipts = Receipt::join('users', 'receipts.user_id', '=', 'users.user_id')  
-                                    ->where('receipts.user_id', $userId)  // Fetch only for logged-in user
-                                    ->select('receipts.*', 'users.name as user_name') 
-                                    ->get();
-    
+            $userId = Auth::user()->user_id;
+
+            $userReceipts = Receipt::join('users', 'receipts.user_id', '=', 'users.user_id')
+                                    ->where('receipts.user_id', $userId)
+                                    ->select('receipts.*', 'users.name as user_name')
+                                    ->get()
+                                    ->map(function ($r) { $r->source = 'receipt'; return $r; });
+
+            $financialReceipts = DB::table('financial_records')
+                ->join('users', 'financial_records.created_by', '=', 'users.user_id')
+                ->where('financial_records.created_by', $userId)
+                ->whereNotNull('financial_records.receipt_file')
+                ->whereNull('financial_records.deleted_at')
+                ->select(
+                    DB::raw('financial_records.id as receipt_id'),
+                    DB::raw('financial_records.created_by as user_id'),
+                    DB::raw('users.name as user_name'),
+                    DB::raw("COALESCE(financial_records.description, CONCAT(financial_records.type, ' - ', financial_records.category)) as description"),
+                    DB::raw('financial_records.receipt_file'),
+                    DB::raw('financial_records.created_at'),
+                    DB::raw("'financial_record' as source")
+                )
+                ->get();
+
+            $allReceipts = $userReceipts->toBase()->merge($financialReceipts);
+
             return response()->json([
                 'status' => true,
                 'message' => 'User receipts fetched successfully.',
-                'data' => $userReceipts
+                'data' => $allReceipts
             ], 200);
         } catch (Exception $e) {
             return response()->json([

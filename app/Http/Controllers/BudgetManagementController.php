@@ -5,12 +5,129 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\BudgetAllocation;
+use App\Models\AwardedTender;
+use App\Models\Department;
 use App\Models\Project;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Validation\ValidationException;
 
 class BudgetManagementController extends Controller
 {
+    protected function normalizeBudgetTarget(BudgetAllocation $budget): array
+    {
+        $budget->loadMissing([
+            'department:department_id,name',
+            'user:user_id,name,department_id',
+            'project:project_id,project_name,tender_id,budget',
+            'project.tender:tender_id,title,tender_number',
+            'awardedTender:award_id,tender_id,user_id,awarded_document',
+            'awardedTender.tender:tender_id,title,tender_number,procurement_entity',
+            'creator:user_id,name',
+            'approver:user_id,name',
+        ]);
+
+        $allocatedAmount = (float) ($budget->allocated_amount ?? 0);
+        $spentAmount = (float) ($budget->spent_amount ?? 0);
+        $utilization = $allocatedAmount > 0 ? ($spentAmount / $allocatedAmount) * 100 : 0;
+        $type = $budget->allocation_type ?? BudgetAllocation::TYPE_DEPARTMENT;
+
+        $department = $budget->department;
+        $fallbackUser = $budget->user;
+        $project = $budget->project;
+        $award = $budget->awardedTender;
+        $awardTender = $award?->tender;
+
+        $targetLabel = match ($type) {
+            BudgetAllocation::TYPE_PROJECT => $project?->project_name ?? 'Unknown Project',
+            BudgetAllocation::TYPE_AWARDED_TENDER => $awardTender?->title ?? 'Unknown Awarded Tender',
+            default => $department?->name ?? $fallbackUser?->name ?? 'Unassigned Department',
+        };
+
+        $targetMeta = match ($type) {
+            BudgetAllocation::TYPE_PROJECT => collect([
+                $project?->tender?->title,
+                $project?->project_status,
+            ])->filter()->implode(' • '),
+            BudgetAllocation::TYPE_AWARDED_TENDER => collect([
+                $awardTender?->tender_number,
+                $awardTender?->procurement_entity,
+            ])->filter()->implode(' • '),
+            default => null,
+        };
+
+        return [
+            'id' => $budget->id,
+            'target_id' => match ($type) {
+                BudgetAllocation::TYPE_PROJECT => $budget->project_id,
+                BudgetAllocation::TYPE_AWARDED_TENDER => $budget->award_id,
+                default => $department?->department_id ?? $fallbackUser?->department_id ?? $budget->department_id,
+            },
+            'type' => $type,
+            'type_label' => $budget->target_type_label,
+            'name' => $targetLabel,
+            'target_label' => $targetLabel,
+            'target_meta' => $targetMeta,
+            'department_id' => $department?->department_id ?? $fallbackUser?->department_id ?? $budget->department_id,
+            'project_id' => $budget->project_id,
+            'award_id' => $budget->award_id,
+            'allocated' => $allocatedAmount,
+            'spent' => $spentAmount,
+            'remaining' => $allocatedAmount - $spentAmount,
+            'utilization_percentage' => round($utilization, 2),
+            'color' => $utilization > 90 ? 'bg-red-500' : ($utilization > 70 ? 'bg-amber-500' : 'bg-green-500'),
+            'project_count' => 0,
+            'status' => $utilization > 90 ? 'Near Limit' : ($utilization > 70 ? 'On Track' : 'Under Budget'),
+            'progress_color' => $utilization > 90 ? 'bg-red-500' : ($utilization > 70 ? 'bg-blue-500' : 'bg-green-500'),
+            'status_color' => $utilization > 90 ? 'text-red-600' : ($utilization > 70 ? 'text-blue-600' : 'text-green-600'),
+            'created_by' => $budget->creator?->name ?? 'Unknown User',
+            'approved_by' => $budget->approver?->name,
+            'approved_at' => $budget->approved_at,
+            'allocated_amount' => $allocatedAmount,
+            'spent_amount' => $spentAmount,
+            'period' => $budget->period,
+            'fiscal_year' => $budget->fiscal_year,
+            'description' => $budget->description,
+            'award_document' => $award?->awarded_document,
+        ];
+    }
+
+    protected function validateBudgetPayload(Request $request): array
+    {
+        $validated = $request->validate([
+            'allocation_type' => 'required|in:department,project,awarded_tender',
+            'department_id' => 'nullable|integer|exists:departments,department_id',
+            'project_id' => 'nullable|integer|exists:projects,project_id',
+            'award_id' => 'nullable|integer|exists:awarded_tenders,award_id',
+            'allocated_amount' => 'required|numeric|min:0',
+            'period' => 'required|in:monthly,quarterly,yearly',
+            'description' => 'nullable|string',
+            'fiscal_year' => ['required', 'regex:/^\\d{4}$/'],
+        ]);
+
+        $type = $validated['allocation_type'];
+        $typeMap = [
+            BudgetAllocation::TYPE_DEPARTMENT => 'department_id',
+            BudgetAllocation::TYPE_PROJECT => 'project_id',
+            BudgetAllocation::TYPE_AWARDED_TENDER => 'award_id',
+        ];
+
+        $requiredField = $typeMap[$type];
+        if (empty($validated[$requiredField])) {
+            throw ValidationException::withMessages([
+                $requiredField => [ucfirst(str_replace('_', ' ', $requiredField)) . ' is required for allocation type ' . $type . '.'],
+            ]);
+        }
+
+        foreach ($typeMap as $field) {
+            if ($field !== $requiredField) {
+                $validated[$field] = null;
+            }
+        }
+
+        return $validated;
+    }
+
     /**
      * Get budget overview for CEO dashboard
      */
@@ -18,41 +135,23 @@ class BudgetManagementController extends Controller
     {
         try {
             $fiscalYear = $request->get('fiscal_year', date('Y'));
-            $startDate = "$fiscalYear-01-01";
-            $endDate = "$fiscalYear-12-31";
             
             // Get only approved/active budgets
             $budgetAllocations = BudgetAllocation::where('fiscal_year', $fiscalYear)
                 ->whereIn('status', ['approved', 'active'])
-                ->with(['department:department_id,name', 'creator:user_id,name', 'approver:user_id,name'])
+                ->with([
+                    'department:department_id,name',
+                    'user:user_id,name,department_id',
+                    'project:project_id,project_name,tender_id,budget,project_status',
+                    'project.tender:tender_id,title,tender_number',
+                    'awardedTender:award_id,tender_id,user_id,awarded_document',
+                    'awardedTender.tender:tender_id,title,tender_number,procurement_entity',
+                    'creator:user_id,name',
+                    'approver:user_id,name'
+                ])
                 ->get();
             
-            // Calculate budget allocations without expensive updateSpentAmount calls
-            $departments = $budgetAllocations->map(function($budget) {
-                // Skip updateSpentAmount() to improve performance
-                // TODO: Implement background job for spent amount updates
-                
-                $utilization = $budget->allocated_amount > 0 
-                    ? ($budget->spent_amount / $budget->allocated_amount) * 100 
-                    : 0;
-                
-                return [
-                    'id' => $budget->department->department_id,
-                    'name' => $budget->department->name,
-                    'allocated' => $budget->allocated_amount,
-                    'spent' => $budget->spent_amount,
-                    'remaining' => $budget->allocated_amount - $budget->spent_amount,
-                    'utilization_percentage' => round($utilization, 2),
-                    'color' => $utilization > 90 ? 'bg-red-500' : ($utilization > 70 ? 'bg-amber-500' : 'bg-green-500'),
-                    'project_count' => 0, // TODO: Calculate via background job
-                    'status' => $utilization > 90 ? 'Near Limit' : ($utilization > 70 ? 'On Track' : 'Under Budget'),
-                    'progress_color' => $utilization > 90 ? 'bg-red-500' : ($utilization > 70 ? 'bg-blue-500' : 'bg-green-500'),
-                    'status_color' => $utilization > 90 ? 'text-red-600' : ($utilization > 70 ? 'text-blue-600' : 'text-green-600'),
-                    'created_by' => $budget->creator->name,
-                    'approved_by' => $budget->approver?->name,
-                    'approved_at' => $budget->approved_at
-                ];
-            });
+            $departments = $budgetAllocations->map(fn ($budget) => $this->normalizeBudgetTarget($budget));
             
             // Calculate totals
             $totalAllocated = $departments->sum('allocated');
@@ -79,53 +178,153 @@ class BudgetManagementController extends Controller
     }
     
     /**
+     * Return approved/active budget allocations for payment selection
+     */
+    public function getApprovedBudgets(Request $request)
+    {
+        try {
+            $fiscalYear = $request->get('fiscal_year');
+
+            $query = BudgetAllocation::whereIn('status', ['approved', 'active'])
+                ->with([
+                    'department:department_id,name',
+                    'user:user_id,name,department_id',
+                    'project:project_id,project_name,tender_id,budget,project_status',
+                    'project.tender:tender_id,title,tender_number',
+                    'awardedTender:award_id,tender_id,user_id,awarded_document',
+                    'awardedTender.tender:tender_id,title,tender_number,procurement_entity',
+                    'creator:user_id,name'
+                ]);
+
+            if ($fiscalYear) {
+                $query->where('fiscal_year', $fiscalYear);
+            }
+
+            $budgets = $query->orderBy('created_at', 'desc')->get()->map(function ($b) {
+                $normalized = $this->normalizeBudgetTarget($b);
+
+                return [
+                    'id' => $normalized['id'],
+                    'type' => $normalized['type'],
+                    'type_label' => $normalized['type_label'],
+                    'department_id' => $normalized['department_id'],
+                    'project_id' => $normalized['project_id'],
+                    'award_id' => $normalized['award_id'],
+                    'department_name' => $normalized['target_label'],
+                    'target_label' => $normalized['target_label'],
+                    'target_meta' => $normalized['target_meta'],
+                    'allocated_amount' => $normalized['allocated_amount'],
+                    'spent_amount' => $normalized['spent_amount'],
+                    'remaining' => $normalized['remaining'],
+                    'period' => $normalized['period'],
+                    'fiscal_year' => $normalized['fiscal_year'],
+                    'status' => $b->status,
+                    'description' => $normalized['description'],
+                    'created_by' => $normalized['created_by'],
+                    'award_document' => $normalized['award_document'],
+                ];
+            });
+
+            return response()->json(['status' => 'success', 'data' => $budgets], 200);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Record a payment against an approved budget (increments spent_amount)
+     */
+    public function addPayment(Request $request)
+    {
+        try {
+            $request->validate([
+                'budget_id'   => 'required|integer|exists:budget_allocations,id',
+                'amount'      => 'required|numeric|min:0.01',
+                'description' => 'nullable|string|max:500',
+                'paid_at'     => 'nullable|date',
+            ]);
+
+            $budget = BudgetAllocation::findOrFail($request->budget_id);
+
+            if ($budget->status !== 'approved' && $budget->status !== 'active') {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Payments can only be recorded against approved or active budgets.'
+                ], 422);
+            }
+
+            $newSpent = (float) $budget->spent_amount + (float) $request->amount;
+
+            $budget->update([
+                'spent_amount' => $newSpent,
+            ]);
+
+            $budget->load(['department:department_id,name', 'creator:user_id,name']);
+
+            $normalized = $this->normalizeBudgetTarget($budget);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Payment recorded successfully',
+                'data'    => [
+                    'budget_id'    => $budget->id,
+                    'target'       => $normalized['target_label'],
+                    'type'         => $normalized['type'],
+                    'spent_amount' => $budget->spent_amount,
+                    'allocated'    => $budget->allocated_amount,
+                    'paid_at'      => $request->paid_at ?? now()->toDateString(),
+                    'description'  => $request->description,
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Failed to record payment: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Create new budget allocation (Accountant role)
      */
     public function createBudget(Request $request)
     {
         try {
-            // Debug: Log incoming request data
-            \Log::info('Budget creation request:', $request->all());
-            
-            $request->validate([
-                'department_id' => 'required|integer|exists:users,user_id',
-                'allocated_amount' => 'required|numeric|min:0',
-                'period' => 'required|in:monthly,quarterly,yearly',
-                'description' => 'nullable|string',
-                'fiscal_year' => 'required|in:2022,2023,2024,2025,2026,2027'
-            ]);
-            
-            // Debug: Log validation passed
-            \Log::info('Validation passed');
-            
+            $validated = $this->validateBudgetPayload($request);
+
             $budget = BudgetAllocation::create([
-                'department_id' => (int) $request->department_id,
-                'allocated_amount' => $request->allocated_amount,
+                'department_id' => $validated['department_id'] ?? null,
+                'allocation_type' => $validated['allocation_type'],
+                'project_id' => $validated['project_id'] ?? null,
+                'award_id' => $validated['award_id'] ?? null,
+                'allocated_amount' => $validated['allocated_amount'],
                 'spent_amount' => 0,
-                'period' => $request->period,
-                'description' => $request->description,
-                'fiscal_year' => $request->fiscal_year,
+                'period' => $validated['period'],
+                'description' => $validated['description'] ?? null,
+                'fiscal_year' => $validated['fiscal_year'],
                 'status' => 'pending',
                 'created_by' => auth()->id()
             ]);
-            
-            // Debug: Log budget creation
-            \Log::info('Budget created:', ['budget_id' => $budget->id]);
-            
-            // Load relationships for response - use department_id for Department model
-            $budget->load(['department:department_id,name', 'creator:user_id,name']);
+
+            $budget->load([
+                'department:department_id,name',
+                'project:project_id,project_name,tender_id,budget,project_status',
+                'project.tender:tender_id,title,tender_number',
+                'awardedTender:award_id,tender_id,user_id,awarded_document',
+                'awardedTender.tender:tender_id,title,tender_number,procurement_entity',
+                'creator:user_id,name'
+            ]);
             
             return response()->json([
                 'status' => 'success',
                 'message' => 'Budget created successfully and pending CEO approval',
-                'data' => $budget
+                'data' => $this->normalizeBudgetTarget($budget)
             ], 201);
             
         } catch (\Exception $e) {
-            // Debug: Log the full error
             \Log::error('Budget creation failed:', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
                 'request_data' => $request->all()
             ]);
             
@@ -137,6 +336,53 @@ class BudgetManagementController extends Controller
     }
     
     /**
+     * Create budget directly as approved (CEO role — no approval step needed)
+     */
+    public function createDirectBudget(Request $request)
+    {
+        try {
+            $validated = $this->validateBudgetPayload($request);
+
+            $budget = BudgetAllocation::create([
+                'department_id'   => $validated['department_id'] ?? null,
+                'allocation_type' => $validated['allocation_type'],
+                'project_id'      => $validated['project_id'] ?? null,
+                'award_id'        => $validated['award_id'] ?? null,
+                'allocated_amount' => $validated['allocated_amount'],
+                'spent_amount'    => 0,
+                'period'          => $validated['period'],
+                'description'     => $validated['description'] ?? null,
+                'fiscal_year'     => $validated['fiscal_year'],
+                'status'          => 'approved',
+                'created_by'      => auth()->id(),
+                'approved_by'     => auth()->id(),
+                'approved_at'     => now(),
+            ]);
+
+            $budget->load([
+                'department:department_id,name',
+                'project:project_id,project_name,tender_id,budget,project_status',
+                'project.tender:tender_id,title,tender_number',
+                'awardedTender:award_id,tender_id,user_id,awarded_document',
+                'awardedTender.tender:tender_id,title,tender_number,procurement_entity',
+                'creator:user_id,name'
+            ]);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Budget allocated and approved successfully',
+                'data'    => $this->normalizeBudgetTarget($budget)
+            ], 201);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Failed to allocate budget: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get pending budgets for CEO approval
      */
     public function getPendingBudgets(Request $request)
@@ -146,9 +392,49 @@ class BudgetManagementController extends Controller
             
             $pendingBudgets = BudgetAllocation::where('fiscal_year', $fiscalYear)
                 ->where('status', 'pending')
-                ->with(['department:department_id,name', 'creator:user_id,name'])
+                ->with([
+                    'department:department_id,name',
+                    'user:user_id,name,department_id',
+                    'project:project_id,project_name,tender_id,budget,project_status',
+                    'project.tender:tender_id,title,tender_number',
+                    'awardedTender:award_id,tender_id,user_id,awarded_document',
+                    'awardedTender.tender:tender_id,title,tender_number,procurement_entity',
+                    'creator:user_id,name'
+                ])
                 ->orderBy('created_at', 'desc')
-                ->get();
+                ->get()
+                ->map(function ($budget) {
+                    $normalized = $this->normalizeBudgetTarget($budget);
+
+                    return [
+                        'id' => $budget->id,
+                        'allocation_type' => $normalized['type'],
+                        'type_label' => $normalized['type_label'],
+                        'target_label' => $normalized['target_label'],
+                        'target_meta' => $normalized['target_meta'],
+                        'department_id' => $normalized['department_id'],
+                        'project_id' => $normalized['project_id'],
+                        'award_id' => $normalized['award_id'],
+                        'allocated_amount' => (float) ($budget->allocated_amount ?? 0),
+                        'spent_amount' => (float) ($budget->spent_amount ?? 0),
+                        'period' => $budget->period,
+                        'description' => $budget->description,
+                        'fiscal_year' => $budget->fiscal_year,
+                        'status' => $budget->status,
+                        'created_at' => $budget->created_at,
+                        'approved_at' => $budget->approved_at,
+                        'award_document' => $normalized['award_document'],
+                        'department' => [
+                            'department_id' => $normalized['department_id'],
+                            'name' => $normalized['target_label'],
+                        ],
+                        'creator' => [
+                            'user_id' => $budget->creator?->user_id,
+                            'name' => $budget->creator?->name ?? 'Unknown User',
+                        ],
+                    ];
+                })
+                ->values();
             
             return response()->json([
                 'status' => 'success',
@@ -197,6 +483,72 @@ class BudgetManagementController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to approve budget: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getBudgetSources()
+    {
+        try {
+            $departments = Department::query()
+                ->orderBy('name')
+                ->get(['department_id', 'name'])
+                ->map(function ($department) {
+                    return [
+                        'id' => $department->department_id,
+                        'type' => BudgetAllocation::TYPE_DEPARTMENT,
+                        'label' => $department->name,
+                        'subtitle' => 'Department',
+                    ];
+                });
+
+            $projects = Project::with('tender:tender_id,title,tender_number')
+                ->orderBy('project_name')
+                ->get()
+                ->map(function ($project) {
+                    return [
+                        'id' => $project->project_id,
+                        'type' => BudgetAllocation::TYPE_PROJECT,
+                        'label' => $project->project_name,
+                        'subtitle' => collect([
+                            $project->tender?->title,
+                            $project->project_status,
+                        ])->filter()->implode(' • '),
+                    ];
+                });
+
+            $awardedTenders = AwardedTender::with([
+                'user:user_id,name',
+                'tender:tender_id,title,tender_number,procurement_entity',
+            ])
+                ->orderByDesc('award_id')
+                ->get()
+                ->map(function ($award) {
+                    return [
+                        'id' => $award->award_id,
+                        'type' => BudgetAllocation::TYPE_AWARDED_TENDER,
+                        'label' => $award->tender?->title ?? 'Unknown Tender',
+                        'subtitle' => collect([
+                            $award->tender?->tender_number,
+                            $award->user?->name,
+                            $award->tender?->procurement_entity,
+                        ])->filter()->implode(' • '),
+                        'award_document' => $award->awarded_document,
+                    ];
+                });
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'departments' => $departments->values(),
+                    'projects' => $projects->values(),
+                    'awarded_tenders' => $awardedTenders->values(),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch budget sources: ' . $e->getMessage(),
             ], 500);
         }
     }

@@ -26,4 +26,9 @@ class AwardedTender extends Model
     {
         return $this->belongsTo(Tender::class, 'tender_id', 'tender_id');
     }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'id_of_who_post_award', 'user_id');
+    }
 }

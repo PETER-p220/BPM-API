@@ -32,7 +32,8 @@ class Analysis extends Model
         'projected_profit',
         'projected_profit_percentage',
         'status',
-        'reason_for_reject'
+        'reason_for_reject',
+        'file_path'
     ];
 
     protected $casts = [

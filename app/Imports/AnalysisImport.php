@@ -11,13 +11,16 @@ use Illuminate\Support\Facades\Log;
 class AnalysisImport implements ToModel, WithHeadingRow
 {
     private $projectId;
+    private $tenderId;
     private $processedRows = [];
 
-    public function __construct($projectId)
+    public function __construct($projectId, $tenderId = null)
     {
         $this->projectId = $projectId;
+        $this->tenderId = $tenderId;
         Log::info('AnalysisImport initialized', [
-            'project_id' => $projectId
+            'project_id' => $projectId,
+            'tender_id' => $tenderId,
         ]);
     }
 
@@ -45,6 +48,7 @@ class AnalysisImport implements ToModel, WithHeadingRow
         // Map columns by header name (more reliable than index)
         $data = [
             'project_id' => $this->projectId,
+            'tender_id' => $this->tenderId,
             'user_id' => Auth::id(),
             'serial_number' => $row['serial_number'] ?? $row['s_n'] ?? $row['sn'] ?? null,
             'item_description' => $row['item_description'] ?? $row['item_descriptions'] ?? $row['item'] ?? null,

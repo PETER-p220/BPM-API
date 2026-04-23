@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\AssignTender;
+use App\Models\AwardedTender;
 use App\Models\User;
 use App\Models\Tender;
+use App\Models\Analysis;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Exception;
@@ -12,6 +14,8 @@ use App\Models\UserLog;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Mail;
@@ -545,6 +549,285 @@ private function sendTenderExpirationReminder(User $user, Tender $tender)
         \Log::error("Failed to send expiration reminder to {$user->email}: " . $e->getMessage());
     }
 }
+
+    /**
+     * CEO approves or rejects a quoted tender's quotation.
+     */
+    public function ceoQuotationApproval(Request $request)
+    {
+        try {
+            $request->validate([
+                'tender_id' => 'required|exists:tenders,tender_id',
+                'status' => 'required|in:approved,rejected',
+                'reason' => 'nullable|required_if:status,rejected|string|max:1000',
+            ]);
+
+            $tenderId = $request->tender_id;
+            $status = $request->status;
+            $reason = $request->reason;
+
+            // Update assign_tenders status
+            $updated = AssignTender::where('tender_id', $tenderId)
+                ->where('is_assigned', 'quoted')
+                ->update([
+                    'is_assigned' => $status,
+                    'ceo_comment' => $reason,
+                ]);
+
+            if ($updated === 0) {
+                return response()->json([
+                    'status' => 404,
+                    'message' => 'No quoted tender assignment found for this tender'
+                ], 404);
+            }
+
+            // Also update analyses status for this tender
+            Analysis::where('tender_id', $tenderId)
+                ->where('status', 'pending')
+                ->update([
+                    'status' => $status,
+                    'reason_for_reject' => $status === 'rejected' ? $reason : null,
+                ]);
+
+            // Notify the user who submitted the quotation
+            $assignments = AssignTender::where('tender_id', $tenderId)->get();
+            $tender = Tender::find($tenderId);
+            $tenderTitle = $tender->title ?? 'Unknown Tender';
+
+            foreach ($assignments as $assignment) {
+                $user = User::find($assignment->user_id);
+                if ($user) {
+                    $statusText = $status === 'approved' ? 'approved' : 'rejected';
+                    $subject = "Your Quotation has been {$statusText}: {$tenderTitle}";
+                    $body = "Hi {$user->name},\n\nYour quotation for the tender '{$tenderTitle}' has been {$statusText} by the CEO.";
+                    if ($status === 'rejected' && $reason) {
+                        $body .= "\n\nReason: {$reason}";
+                        $body .= "\n\nPlease review the feedback and submit an updated quotation.";
+                    }
+                    try {
+                        Mail::raw($body, function ($message) use ($user, $subject) {
+                            $message->to($user->email)->subject($subject);
+                        });
+                    } catch (\Exception $e) {
+                        \Log::error("Failed to send quotation {$statusText} email: " . $e->getMessage());
+                    }
+                }
+            }
+
+            return response()->json([
+                'status' => 200,
+                'message' => "Quotation {$status} successfully"
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('CEO quotation approval error: ' . $e->getMessage());
+            return response()->json([
+                'status' => 500,
+                'message' => 'Failed to process approval',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * User marks an approved tender as submitted (physical submission to procurement entity).
+     */
+    public function markSubmitted(Request $request)
+    {
+        try {
+            $request->validate([
+                'tender_id' => 'required|exists:tenders,tender_id',
+            ]);
+
+            $assignment = AssignTender::where('tender_id', $request->tender_id)
+                ->where('user_id', Auth::id())
+                ->where('is_assigned', 'approved')
+                ->first();
+
+            if (!$assignment) {
+                return response()->json([
+                    'status' => 404,
+                    'message' => 'No approved tender assignment found. Only approved tenders can be marked as submitted.'
+                ], 404);
+            }
+
+            $assignment->update(['is_assigned' => 'submitted']);
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Tender marked as submitted successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 500,
+                'message' => 'Failed to mark tender as submitted',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * CEO marks a submitted tender as awarded and stores the certification document.
+     */
+    public function markAwarded(Request $request)
+    {
+        try {
+            $request->validate([
+                'tender_id' => 'required|exists:tenders,tender_id',
+                'awarded_document' => 'required|file|max:10240',
+            ]);
+
+            $assignment = AssignTender::where('tender_id', $request->tender_id)
+                ->where('is_assigned', 'submitted')
+                ->first();
+
+            if (!$assignment) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Only submitted tenders can be marked as awarded.',
+                ], 422);
+            }
+
+            $filePath = $request->file('awarded_document')->store('awarded-tenders', 'public');
+
+            $assignment->update([
+                'is_assigned' => 'awarded',
+                'ceo_comment' => $request->input('ceo_comment'),
+            ]);
+
+            $award = AwardedTender::updateOrCreate(
+                ['tender_id' => $request->tender_id],
+                [
+                    'user_id' => $assignment->user_id,
+                    'id_of_who_post_award' => Auth::id(),
+                    'awarded_document' => $filePath,
+                    'is_sent' => 'not-sent',
+                ]
+            );
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Tender marked as awarded successfully.',
+                'data' => [
+                    'assign_id' => $assignment->assign_id,
+                    'award_id' => $award->award_id,
+                    'awarded_document' => $award->awarded_document,
+                ],
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Mark tender awarded failed: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to mark tender as awarded.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * CEO view: returns tenders that have quotations (status: quoted, approved, rejected, submitted)
+     * with their analysis/quotation data.
+     */
+    public function ceoQuotedTenders()
+    {
+        try {
+            $assignments = AssignTender::with([
+                'tender',
+                'user:user_id,name,email'
+            ])
+            ->whereIn('is_assigned', ['quoted', 'approved', 'rejected', 'submitted', 'awarded'])
+            ->get();
+
+            $result = $assignments->map(function ($a) {
+                $tender = $a->tender;
+                if (!$tender) return null;
+
+                // Get analyses for this tender
+                $analyses = Analysis::where('tender_id', $tender->tender_id)
+                    ->where('user_id', $a->user_id)
+                    ->get();
+
+                $totalVatExcl = $analyses->sum('total_amount_vat_excl');
+                $totalInvestment = $analyses->sum('total_investment');
+                $projectedProfit = $analyses->sum('projected_profit');
+                $projectedProfitPercentage = $totalVatExcl > 0 ? round(($projectedProfit / $totalVatExcl) * 100, 2) : 0;
+                $documentAnalysis = $analyses->firstWhere('file_path', '!=', null) ?: $analyses->first();
+                $items = $analyses->map(function ($analysis) {
+                    return [
+                        'analysis_id' => $analysis->analysis_id,
+                        'description' => $analysis->item_description,
+                        'quantity' => $analysis->quoted_quantity ?? $analysis->quantity,
+                        'rate' => $analysis->quoted_rate ?? $analysis->rate,
+                        'total' => $analysis->quoted_amount ?? $analysis->amount,
+                        'file_path' => $analysis->file_path,
+                    ];
+                })->values();
+
+                return [
+                    'assign_id' => $a->assign_id,
+                    'tender_id' => $tender->tender_id,
+                    'title' => $tender->title,
+                    'tender_type' => $tender->tender_type,
+                    'tender_number' => $tender->tender_number,
+                    'procurement_entity' => $tender->procurement_entity,
+                    'bid_submission' => $tender->bid_submission,
+                    'expired_at' => $tender->expired_at,
+                    'date_of_Publication' => $tender->date_of_Publication,
+                    'value' => $tender->value ?? $tender->estimated_value,
+                    'category' => $tender->category,
+                    'location' => $tender->location,
+                    'description' => $tender->description,
+                    'attachment' => $tender->attachment,
+                    'status' => $a->is_assigned,
+                    'ceo_comment' => $a->ceo_comment,
+                    'award' => AwardedTender::where('tender_id', $tender->tender_id)
+                        ->select('award_id', 'awarded_document', 'created_at')
+                        ->latest('award_id')
+                        ->first(),
+                    'user' => $a->user,
+                    'quotation' => [
+                        'total_amount_vat_excl' => $totalVatExcl,
+                        'total_investment' => $totalInvestment,
+                        'projected_profit' => $projectedProfit,
+                        'projected_profit_percentage' => $projectedProfitPercentage,
+                        'items_count' => $analyses->count(),
+                        'items' => $items,
+                        'user' => $a->user,
+                        'status' => $analyses->first()?->status ?? 'pending',
+                        'file_path' => $documentAnalysis?->file_path,
+                        'created_at' => $documentAnalysis?->created_at,
+                    ],
+                ];
+            })->filter()->values();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $result
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('CEO quoted tenders error: ' . $e->getMessage());
+            return response()->json([
+                'status' => 500,
+                'message' => 'Failed to load quoted tenders',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
 
 

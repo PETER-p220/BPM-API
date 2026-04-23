@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Imports\AnalysisImport;
 use App\Models\Analysis;
+use App\Models\AssignTender;
 use App\Models\User; 
 use App\Models\Project; 
 use App\Models\Tender;
@@ -50,13 +51,15 @@ class AnalysisController extends Controller
                 ->where('user_id', $user->user_id)
                 ->get();
             
-            // Group analyses by project_id and calculate financial totals
+            // Group analyses by project or tender and calculate financial totals
             $groupedAnalyses = [];
             foreach ($analyses as $analysis) {
                 $projectId = $analysis->project_id;
-                if (!isset($groupedAnalyses[$projectId])) {
-                    $groupedAnalyses[$projectId] = [
+                $groupKey = $projectId ? 'project-' . $projectId : ($analysis->tender_id ? 'tender-' . $analysis->tender_id : 'analysis-' . $analysis->analysis_id);
+                if (!isset($groupedAnalyses[$groupKey])) {
+                    $groupedAnalyses[$groupKey] = [
                         'project_id' => $projectId,
+                        'tender_id' => $analysis->tender_id,
                         'project' => $analysis->project,
                         'user' => $analysis->user,
                         'tender' => $analysis->tender,
@@ -64,6 +67,7 @@ class AnalysisController extends Controller
                         'updated_at' => $analysis->updated_at,
                         'status' => $analysis->status ?? 'pending',
                         'reason_for_reject' => $analysis->reason_for_reject ?? null,
+                        'file_path' => $analysis->file_path,
                         'items' => [],
                         'total_amount_vat_excl' => 0,
                         'total_amount_vat_incl' => 0,
@@ -76,7 +80,7 @@ class AnalysisController extends Controller
                 }
                 
                 // Add item to the project
-                $groupedAnalyses[$projectId]['items'][] = [
+                $groupedAnalyses[$groupKey]['items'][] = [
                     'analysis_id' => $analysis->analysis_id,
                     'serial_number' => $analysis->serial_number ?? 'N/A',
                     'item_description' => $analysis->item_description ?? 'N/A',
@@ -96,27 +100,49 @@ class AnalysisController extends Controller
                     'total_amount_needed' => $analysis->total_amount_needed ?? null,
                     'site_contingency' => $analysis->site_contingency ?? null,
                     'total_investment' => $analysis->total_investment ?? null,
-                    'projected_profit' => $analysis->projected_profit ?? null
+                    'projected_profit' => $analysis->projected_profit ?? null,
+                    'file_path' => $analysis->file_path ?? null
                 ];
                 
                 // Calculate financial totals for project
                 $quotedAmount = floatval($analysis->quoted_amount ?? ($analysis->quantity * $analysis->rate) ?? 0);
                 $buyingAmount = floatval($analysis->amount ?? 0);
+                $manualVatExcl = floatval($analysis->total_amount_vat_excl ?? 0);
+                $manualVatIncl = floatval($analysis->total_amount_vat_incl ?? 0);
+                $manualInvestment = floatval($analysis->total_investment ?? 0);
+                $manualProfit = floatval($analysis->projected_profit ?? 0);
+                $manualProfitPercentage = floatval($analysis->projected_profit_percentage ?? 0);
+
+                if ($analysis->file_path && $manualVatExcl > 0 && $quotedAmount === 0 && $buyingAmount === 0) {
+                    $groupedAnalyses[$groupKey]['total_amount_vat_excl'] += $manualVatExcl;
+                    $groupedAnalyses[$groupKey]['total_amount_vat_incl'] += $manualVatIncl;
+                    $groupedAnalyses[$groupKey]['total_amount_needed'] += floatval($analysis->total_amount_needed ?? 0);
+                    $groupedAnalyses[$groupKey]['site_contingency'] += floatval($analysis->site_contingency ?? 0);
+                    $groupedAnalyses[$groupKey]['total_investment'] += $manualInvestment;
+                    $groupedAnalyses[$groupKey]['projected_profit'] += $manualProfit;
+                    if ($manualProfitPercentage > 0) {
+                        $groupedAnalyses[$groupKey]['projected_profit_percentage'] = $manualProfitPercentage;
+                    }
+                    continue;
+                }
                 
                 // VAT calculations (18% VAT rate)
                 $vatRate = 0.18;
                 $vatAmount = $quotedAmount * $vatRate;
                 
-                $groupedAnalyses[$projectId]['total_amount_vat_excl'] += $quotedAmount;
-                $groupedAnalyses[$projectId]['total_amount_vat_incl'] += $quotedAmount + $vatAmount;
-                $groupedAnalyses[$projectId]['total_amount_needed'] += $buyingAmount;
-                $groupedAnalyses[$projectId]['site_contingency'] += $quotedAmount * 0.1; // 10% contingency
-                $groupedAnalyses[$projectId]['total_investment'] += $quotedAmount * 1.2; // 20% investment factor
-                $groupedAnalyses[$projectId]['projected_profit'] += $quotedAmount - $buyingAmount; // Profit margin
+                $groupedAnalyses[$groupKey]['total_amount_vat_excl'] += $quotedAmount;
+                $groupedAnalyses[$groupKey]['total_amount_vat_incl'] += $quotedAmount + $vatAmount;
+                $groupedAnalyses[$groupKey]['total_amount_needed'] += $buyingAmount;
+                $groupedAnalyses[$groupKey]['site_contingency'] += $quotedAmount * 0.1; // 10% contingency
+                $groupedAnalyses[$groupKey]['total_investment'] += $quotedAmount * 1.2; // 20% investment factor
+                $groupedAnalyses[$groupKey]['projected_profit'] += $quotedAmount - $buyingAmount; // Profit margin
             }
             
             // Calculate profit percentage for each project
             foreach ($groupedAnalyses as $projectId => &$project) {
+                if ($project['projected_profit_percentage'] > 0) {
+                    continue;
+                }
                 if ($project['total_amount_vat_incl'] > 0) {
                     $project['projected_profit_percentage'] = round(($project['projected_profit'] / $project['total_amount_vat_incl']) * 100, 2);
                 }
@@ -194,11 +220,17 @@ public function ItemsDropdown(Request $request)
                 'all_data' => array_keys($request->all())
             ]);
 
-            // Check if user already has a pending analysis for this project
-            $existingAnalysis = Analysis::where('project_id', $request->project_id)
-                                    ->where('user_id', Auth::id())
-                                    ->whereIn('status', ['pending', 'approved'])
-                                    ->first();
+            // Check if user already has a pending analysis for this project/tender
+            $existingQuery = Analysis::where('user_id', Auth::id())
+                                    ->whereIn('status', ['pending', 'approved']);
+
+            if ($request->project_id) {
+                $existingQuery->where('project_id', $request->project_id);
+            } elseif ($request->tender_id) {
+                $existingQuery->where('tender_id', $request->tender_id);
+            }
+
+            $existingAnalysis = $existingQuery->first();
 
             if ($existingAnalysis) {
                 $message = $existingAnalysis->status === 'approved' 
@@ -215,7 +247,7 @@ public function ItemsDropdown(Request $request)
             // Temporarily remove mime validation to see what we get
             $request->validate([
                 'excel_file' => 'required|file|max:10240', // Removed mimes validation temporarily
-                'project_id' => 'required|exists:projects,project_id',
+                'project_id' => 'nullable|exists:projects,project_id',
                 'tender_id' => 'nullable|exists:tenders,tender_id',
                 'serial_number' => 'nullable|string|max:255',
                 'item_description' => 'nullable|string|max:255',
@@ -228,6 +260,13 @@ public function ItemsDropdown(Request $request)
                 'amount' => 'nullable|numeric|min:0',
                 'source' => 'nullable|string|max:255',
                 'urgent_status' => 'nullable|in:urgent,normal,low',
+                'total_amount_vat_excl' => 'nullable|numeric|min:0',
+                'total_amount_vat_incl' => 'nullable|numeric|min:0',
+                'total_amount_needed' => 'nullable|numeric|min:0',
+                'site_contingency' => 'nullable|numeric|min:0',
+                'total_investment' => 'nullable|numeric|min:0',
+                'projected_profit' => 'nullable|numeric',
+                'projected_profit_percentage' => 'nullable|numeric',
             ]);
     
             // Debug: Log file information
@@ -242,34 +281,7 @@ public function ItemsDropdown(Request $request)
                 'tmp_path' => $file->getPathname()
             ]);
 
-            // Manual mime type check
-            $allowedMimes = [
-                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-                'application/vnd.ms-excel', // .xls
-                'application/octet-stream', // Some systems send this
-                'text/plain', // Your system is sending this for Excel files
-                'text/csv', // Sometimes Excel files are detected as CSV
-                'application/csv' // Alternative CSV mime type
-            ];
-            
-            // Also check by file extension as fallback
-            $allowedExtensions = ['xlsx', 'xls'];
-            $fileExtension = strtolower($file->getClientOriginalExtension());
-            
-            if (!in_array($file->getMimeType(), $allowedMimes) && !in_array($fileExtension, $allowedExtensions)) {
-                Log::error('Mime type not allowed', [
-                    'mime_type' => $file->getMimeType(),
-                    'extension' => $fileExtension,
-                    'allowed' => $allowedMimes,
-                    'allowed_extensions' => $allowedExtensions
-                ]);
-                return response()->json([
-                    'status' => 400,
-                    'message' => 'File type not allowed. Please upload a valid Excel file (.xlsx or .xls)'
-                ], 400);
-            }
-    
-            // Check if file is actually readable and is a real Excel file
+            // Check file validity
             if (!$file->isValid()) {
                 Log::error('File validation failed', ['error' => $file->getError()]);
                 return response()->json([
@@ -278,70 +290,118 @@ public function ItemsDropdown(Request $request)
                 ], 400);
             }
 
-            // Additional validation: Check if file is actually a valid Excel file
-            // Since mime type is text/plain, we need to verify the file structure
-            $fileContent = file_get_contents($file->getPathname());
-            if (strpos($fileContent, '<?xml') === false && strpos($fileContent, 'PK') === false) {
-                Log::error('File is not a valid Excel file', [
-                    'file_starts_with' => substr($fileContent, 0, 50)
-                ]);
+            $fileExtension = strtolower($file->getClientOriginalExtension());
+            $isPdf = in_array($fileExtension, ['pdf']) || $file->getMimeType() === 'application/pdf';
+            $isExcel = in_array($fileExtension, ['xlsx', 'xls']) || in_array($file->getMimeType(), [
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/vnd.ms-excel',
+                'application/octet-stream',
+                'text/plain',
+                'text/csv',
+                'application/csv'
+            ]);
+
+            if (!$isPdf && !$isExcel) {
                 return response()->json([
                     'status' => 400,
-                    'message' => 'File is not a valid Excel file. Please upload a proper .xlsx or .xls file.'
+                    'message' => 'File type not allowed. Please upload an Excel (.xlsx, .xls) or PDF file.'
                 ], 400);
             }
-    
-            try {
-                $importer = new AnalysisImport($request->project_id);
-                Excel::import($importer, $file);
-            } catch (\Exception $excelException) {
-                Log::error('Excel import failed', [
-                    'error' => $excelException->getMessage(),
-                    'file_path' => $file->getPathname()
+
+            $rowCount = 0;
+
+            if ($isPdf) {
+                // Store PDF file and create a single analysis record
+                $storedPath = $file->store('analyses/documents', 'public');
+
+                $totalVatExcl = $request->input('total_amount_vat_excl');
+                $totalVatIncl = $request->input('total_amount_vat_incl');
+                $projectedProfit = $request->input('projected_profit');
+                $projectedProfitPercentage = $request->input('projected_profit_percentage');
+
+                if ($totalVatExcl !== null && $totalVatIncl === null) {
+                    $totalVatIncl = round(((float) $totalVatExcl) * 1.18, 2);
+                }
+
+                if ($totalVatExcl !== null && $projectedProfit !== null && $projectedProfitPercentage === null && (float) $totalVatExcl > 0) {
+                    $projectedProfitPercentage = round((((float) $projectedProfit) / ((float) $totalVatExcl)) * 100, 2);
+                }
+
+                Analysis::create([
+                    'project_id' => $request->project_id,
+                    'tender_id' => $request->tender_id,
+                    'user_id' => Auth::id(),
+                    'file_path' => $storedPath,
+                    'item_description' => 'PDF Document: ' . $file->getClientOriginalName(),
+                    'serial_number' => 'PDF-' . time(),
+                    'total_amount_vat_excl' => $totalVatExcl,
+                    'total_amount_vat_incl' => $totalVatIncl,
+                    'total_amount_needed' => $request->input('total_amount_needed'),
+                    'site_contingency' => $request->input('site_contingency'),
+                    'total_investment' => $request->input('total_investment'),
+                    'projected_profit' => $projectedProfit,
+                    'projected_profit_percentage' => $projectedProfitPercentage,
                 ]);
-                
-                // Try to clean up any temporary files
-                if (file_exists($file->getPathname())) {
-                    unlink($file->getPathname());
+
+                $rowCount = 1;
+            } else {
+                // Excel import flow
+                try {
+                    $importer = new AnalysisImport($request->project_id, $request->tender_id);
+                    Excel::import($importer, $file);
+                } catch (\Exception $excelException) {
+                    Log::error('Excel import failed', [
+                        'error' => $excelException->getMessage(),
+                        'file_path' => $file->getPathname()
+                    ]);
+                    
+                    return response()->json([
+                        'status' => 400,
+                        'message' => 'Failed to read Excel file. Please ensure it is a valid .xlsx or .xls file and not corrupted.'
+                    ], 400);
+                }
+    
+                $rowCountQuery = Analysis::where('user_id', Auth::id())
+                                    ->whereNotNull('serial_number');
+                if ($request->project_id) {
+                    $rowCountQuery->where('project_id', $request->project_id);
+                } elseif ($request->tender_id) {
+                    $rowCountQuery->where('tender_id', $request->tender_id);
+                }
+                $rowCount = $rowCountQuery->count();
+    
+                if ($rowCount === 0) {
+                    throw new \Exception('No meaningful data was imported from the Excel file');
                 }
                 
-                return response()->json([
-                    'status' => 400,
-                    'message' => 'Failed to read Excel file. Please ensure it is a valid .xlsx or .xls file and not corrupted.'
-                ], 400);
-            }
-    
-            $rowCount = Analysis::where('project_id', $request->project_id)
-                                ->whereNotNull('serial_number')
-                                ->count();
-    
-            if ($rowCount === 0) {
-                throw new \Exception('No meaningful data was imported from the Excel file');
-            }
-            
-            // Update the imported analysis with additional fields if provided
-            if ($rowCount > 0) {
+                // Update the imported analysis with additional fields if provided
                 $updateData = [];
                 if ($request->tender_id) $updateData['tender_id'] = $request->tender_id;
-                if ($request->serial_number) $updateData['serial_number'] = $request->serial_number;
-                if ($request->item_description) $updateData['item_description'] = $request->item_description;
-                if ($request->quoted_quantity) $updateData['quoted_quantity'] = $request->quoted_quantity;
-                if ($request->quoted_unit) $updateData['quoted_unit'] = $request->quoted_unit;
-                if ($request->quoted_rate) $updateData['quoted_rate'] = $request->quoted_rate;
-                if ($request->quoted_amount) $updateData['quoted_amount'] = $request->quoted_amount;
-                if ($request->quantity) $updateData['quantity'] = $request->quantity;
-                if ($request->rate) $updateData['rate'] = $request->rate;
-                if ($request->amount) $updateData['amount'] = $request->amount;
                 if ($request->source) $updateData['source'] = $request->source;
                 if ($request->urgent_status) $updateData['urgent_status'] = $request->urgent_status;
                 
                 if (!empty($updateData)) {
-                    Analysis::where('project_id', $request->project_id)
-                             ->where('user_id', Auth::id())
-                             ->update($updateData);
+                    $updateQuery = Analysis::where('user_id', Auth::id());
+                    if ($request->project_id) {
+                        $updateQuery->where('project_id', $request->project_id);
+                    } elseif ($request->tender_id) {
+                        $updateQuery->where('tender_id', $request->tender_id);
+                    }
+                    $updateQuery->update($updateData);
                 }
             }
     
+            // Auto-mark tender as 'quoted' after successful upload
+            if ($request->tender_id) {
+                AssignTender::where('tender_id', $request->tender_id)
+                    ->where('user_id', Auth::id())
+                    ->whereIn('is_assigned', ['on-progress', 'rejected'])
+                    ->update([
+                        'is_assigned' => 'quoted',
+                        'ceo_comment' => null,
+                    ]);
+            }
+
             Log::info('Analysis data imported successfully', [
                 'user_id' => Auth::id(),
                 'project_id' => $request->project_id,
@@ -353,9 +413,15 @@ public function ItemsDropdown(Request $request)
             $uploaderName = $uploader->name;
             $uploaderEmail = $uploader->email;
     
-            // Get project details
-            $project = \App\Models\Project::find($request->project_id);
-            $projectName = $project->project_name ?? 'Unknown Project';
+            // Get project/tender details for notifications
+            $projectName = 'Unknown Project';
+            if ($request->project_id) {
+                $project = \App\Models\Project::find($request->project_id);
+                $projectName = $project->project_name ?? 'Unknown Project';
+            } elseif ($request->tender_id) {
+                $tender = \App\Models\Tender::find($request->tender_id);
+                $projectName = $tender->title ?? 'Unknown Tender';
+            }
     
             // Notify users with role_id = 1
             $adminUsers = User::where('role_id', 1)

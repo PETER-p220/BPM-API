@@ -41,7 +41,11 @@ class TenderController extends Controller
     {
         try {
             $tenders = Tender::join('users', 'tenders.user_id', '=', 'users.user_id')
-                ->select('tenders.*', 'users.name as user_name')
+                ->leftJoin(
+                    DB::raw('(SELECT tender_id, is_assigned FROM assign_tenders WHERE assign_id IN (SELECT MAX(assign_id) FROM assign_tenders GROUP BY tender_id)) as latest_assign'),
+                    'tenders.tender_id', '=', 'latest_assign.tender_id'
+                )
+                ->select('tenders.*', 'users.name as user_name', 'latest_assign.is_assigned as status')
                 ->orderBy('tenders.tender_id', 'desc')
                 ->get();
     

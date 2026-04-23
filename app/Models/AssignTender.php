@@ -16,7 +16,8 @@ class AssignTender extends Model
     protected $fillable = [
         'tender_id',
         'user_id',
-        'is_assigned'
+        'is_assigned',
+        'ceo_comment'
     ];
 
 

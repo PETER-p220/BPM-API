@@ -162,14 +162,14 @@ class ProjectController extends Controller
         $validator = Validator::make($request->all(), [
             'project_name' => 'required|string|max:255',
             'tender_id' => 'nullable|exists:tenders,tender_id',
-            'user_id' => 'required|exists:users,user_id',
-            'contract_id' => 'required|exists:contracts,contract_id',
+            'user_id' => 'nullable|exists:users,user_id',
+            'contract_id' => 'nullable|exists:contracts,contract_id',
             'member_id' => 'nullable|array',
             'member_id.*' => 'exists:users,user_id',
-            'created_by' => 'required|string|max:255',
-            'project_status' => 'nullable|string|in:on-progress,completed,failed',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after_or_equal:start_date',
+            'created_by' => 'nullable|string|max:255',
+            'project_status' => 'nullable|string|in:on-progress,pending,active,completed,failed',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date',
         ]);
 
         if ($validator->fails()) {
@@ -187,14 +187,16 @@ class ProjectController extends Controller
                 'user_id' => $request->user_id,
                 'contract_id' => $request->contract_id,
                 'member_id' => $request->member_id ? json_encode($request->member_id) : null,
-                'created_by' => $request->created_by,
+                'created_by' => $request->created_by ?? Auth::user()?->name ?? 'CEO',
                 'project_status' => $request->input('project_status', 'on-progress'),
                 'start_date' => $request->start_date,
                 'end_date' => $request->end_date,
             ]);
 
-            $user = User::findOrFail($request->user_id);
-            $this->sendProjectAssignedEmailToUser($user, $project);
+            if ($request->user_id) {
+                $user = User::find($request->user_id);
+                if ($user) $this->sendProjectAssignedEmailToUser($user, $project);
+            }
 
             return response()->json([
                 'status' => true,
@@ -220,7 +222,7 @@ class ProjectController extends Controller
             'contract_id' => 'sometimes|exists:contracts,contract_id',
             'member_id.*' => 'exists:users,user_id',
             'created_by' => 'sometimes|string|max:255',
-            'project_status' => 'sometimes|string|in:on-progress,completed,failed',
+            'project_status' => 'sometimes|string|in:on-progress,pending,active,completed,failed',
             'start_date' => 'sometimes|date',
             'end_date' => 'sometimes|date|after_or_equal:start_date',
             'extended_date' => 'nullable|date',

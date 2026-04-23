@@ -18,6 +18,7 @@ class FinancialRecord extends Model
         'category',
         'amount',
         'status',
+        'receipt_file',
         'created_by',
         'approved_by',
         'approved_at'

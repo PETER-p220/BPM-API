@@ -65,7 +65,7 @@ class FinancialController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'date' => 'required|date',
-                'description' => 'required|string|max:255',
+                'description' => 'nullable|string|max:255',
                 'reference' => 'nullable|string|max:100',
                 'type' => 'required|in:income,expense',
                 'category' => 'required|in:sales,services,operations,salary,utilities,maintenance',
@@ -81,6 +81,12 @@ class FinancialController extends Controller
                 ], 422);
             }
 
+            $receiptPath = null;
+            if ($request->hasFile('receipt')) {
+                $receiptPath = $request->file('receipt')->store('receipts/financial', 'public');
+                $receiptPath = asset('storage/' . $receiptPath);
+            }
+
             $record = FinancialRecord::create([
                 'date' => $request->date,
                 'description' => $request->description,
@@ -89,6 +95,7 @@ class FinancialController extends Controller
                 'category' => $request->category,
                 'amount' => $request->amount,
                 'status' => $request->status,
+                'receipt_file' => $receiptPath,
                 'created_by' => Auth::id()
             ]);
 
@@ -135,7 +142,7 @@ class FinancialController extends Controller
 
             $validator = Validator::make($request->all(), [
                 'date' => 'required|date',
-                'description' => 'required|string|max:255',
+                'description' => 'nullable|string|max:255',
                 'reference' => 'nullable|string|max:100',
                 'type' => 'required|in:income,expense',
                 'category' => 'required|in:sales,services,operations,salary,utilities,maintenance',
@@ -151,7 +158,7 @@ class FinancialController extends Controller
                 ], 422);
             }
 
-            $record->update([
+            $updateData = [
                 'date' => $request->date,
                 'description' => $request->description,
                 'reference' => $request->reference,
@@ -159,7 +166,14 @@ class FinancialController extends Controller
                 'category' => $request->category,
                 'amount' => $request->amount,
                 'status' => $request->status
-            ]);
+            ];
+
+            if ($request->hasFile('receipt')) {
+                $receiptPath = $request->file('receipt')->store('receipts/financial', 'public');
+                $updateData['receipt_file'] = asset('storage/' . $receiptPath);
+            }
+
+            $record->update($updateData);
 
             return response()->json([
                 'status' => 'success',

@@ -12,6 +12,9 @@ class BudgetAllocation extends Model
 
     protected $fillable = [
         'department_id',
+        'allocation_type',
+        'project_id',
+        'award_id',
         'allocated_amount',
         'spent_amount',
         'period',
@@ -30,12 +33,26 @@ class BudgetAllocation extends Model
         'approved_at' => 'datetime'
     ];
 
+    public const TYPE_DEPARTMENT = 'department';
+    public const TYPE_PROJECT = 'project';
+    public const TYPE_AWARDED_TENDER = 'awarded_tender';
+
     /**
      * Get the department this budget is allocated to
      */
     public function department()
     {
         return $this->belongsTo(Department::class, 'department_id', 'department_id');
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class, 'project_id', 'project_id');
+    }
+
+    public function awardedTender(): BelongsTo
+    {
+        return $this->belongsTo(AwardedTender::class, 'award_id', 'award_id');
     }
 
     /**
@@ -104,6 +121,24 @@ class BudgetAllocation extends Model
             'rejected' => 'text-red-600 bg-red-100/30',
             'active' => 'text-blue-600 bg-blue-100/30',
             default => 'text-slate-600 bg-slate-100/30'
+        };
+    }
+
+    public function getTargetTypeLabelAttribute(): string
+    {
+        return match ($this->allocation_type ?? self::TYPE_DEPARTMENT) {
+            self::TYPE_PROJECT => 'Project',
+            self::TYPE_AWARDED_TENDER => 'Awarded Tender',
+            default => 'Department',
+        };
+    }
+
+    public function getTargetLabelAttribute(): string
+    {
+        return match ($this->allocation_type ?? self::TYPE_DEPARTMENT) {
+            self::TYPE_PROJECT => $this->project?->project_name ?? 'Unknown Project',
+            self::TYPE_AWARDED_TENDER => $this->awardedTender?->tender?->title ?? 'Unknown Awarded Tender',
+            default => $this->department?->name ?? $this->user?->name ?? 'Unassigned Department',
         };
     }
 }

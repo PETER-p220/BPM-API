@@ -13,7 +13,8 @@ class AwardedTenderController extends Controller
         try {
             $awards = AwardedTender::with([
                 'user:user_id,name',
-                'tender:tender_id,title'
+                'creator:user_id,name',
+                'tender:tender_id,title,tender_number,procurement_entity'
             ])
                 ->orderBy('award_id', 'desc')
                 ->get();
@@ -21,7 +22,12 @@ class AwardedTenderController extends Controller
             $data = $awards->map(function ($award) {
                 return [
                     'award_id' => $award->award_id,
+                    'tender_id' => $award->tender_id,
+                    'title' => $award->tender?->title,
+                    'tender_number' => $award->tender?->tender_number,
+                    'procurement_entity' => $award->tender?->procurement_entity,
                     'user_name' => $award->user?->name,
+                    'posted_by' => $award->creator?->name,
                     'awarded_document' => $award->awarded_document,
                     'is_sent' => $award->is_sent,
                     'created_at' => optional($award->created_at)->toDateTimeString(),
@@ -60,6 +66,45 @@ class AwardedTenderController extends Controller
             return response()->json([         
                 'status' => false,
                 'message' => 'Failed to count awarded tenders.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function budgetSources()
+    {
+        try {
+            $awards = AwardedTender::with([
+                'user:user_id,name',
+                'tender:tender_id,title,tender_number,procurement_entity'
+            ])->orderByDesc('award_id')->get();
+
+            $data = $awards->map(function ($award) {
+                return [
+                    'id' => $award->award_id,
+                    'type' => 'awarded_tender',
+                    'label' => $award->tender?->title ?? 'Unknown Tender',
+                    'subtitle' => collect([
+                        $award->tender?->tender_number,
+                        $award->user?->name,
+                        $award->tender?->procurement_entity,
+                    ])->filter()->implode(' • '),
+                    'award_document' => $award->awarded_document,
+                    'tender_id' => $award->tender_id,
+                ];
+            })->values();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Awarded tender sources fetched successfully.',
+                'data' => $data,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching awarded tender budget sources: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to fetch awarded tender sources.',
                 'error' => $e->getMessage(),
             ], 500);
         }

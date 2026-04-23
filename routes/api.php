@@ -49,6 +49,9 @@ use App\Http\Controllers\API\ComplianceController;
 use App\Http\Controllers\TeraInviteController;
 use App\Http\Controllers\TeraPOSController;
 use App\Http\Controllers\FinancialRecordsController;
+use App\Http\Controllers\BranchController;
+use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\VTSController;
 
 // Public Routes
 Route::get('/login', function () {
@@ -116,7 +119,11 @@ Route::get('/budget/analytics', [AnalyticsController::class, 'getBudgetAnalytics
 
 // Budget Management Routes
 Route::get('/budget/overview', [BudgetManagementController::class, 'getBudgetOverview']);
+Route::get('/budget/sources', [BudgetManagementController::class, 'getBudgetSources']);
 Route::post('/budget/create', [BudgetManagementController::class, 'createBudget']);
+Route::post('/budget/create-direct', [BudgetManagementController::class, 'createDirectBudget']);
+Route::get('/budget/approved', [BudgetManagementController::class, 'getApprovedBudgets']);
+Route::post('/budget/payment', [BudgetManagementController::class, 'addPayment']);
 Route::get('/budget/pending', [BudgetManagementController::class, 'getPendingBudgets']);
 Route::post('/budget/{budgetId}/approve', [BudgetManagementController::class, 'approveBudget']);
 Route::post('/budget/{budgetId}/reject', [BudgetManagementController::class, 'rejectBudget']);
@@ -156,6 +163,7 @@ Route::get('/count/roles', [RoleController::class, 'countRoles']);
 
 //department Route
 Route::apiResource('/departments', DepartmentController::class);
+Route::apiResource('/branches', BranchController::class);
 Route::get('/dropdown/department', [DepartmentController::class, 'departmentByDropDown']);
 Route::get('/count/departments', [DepartmentController::class, 'countDepartments']);
 
@@ -183,6 +191,12 @@ Route::get('/count/all/on-progress-tenders', [AssignTenderController::class, 'co
 Route::get('/count/all/deadline-reached-tenders', [AssignTenderController::class, 'countAllDeadlineReachedTenders']);
 Route::get('/count/all-expired/tenders', [AssignTenderController::class, 'countAllExpiredTenders']);
 
+//CEO quotation approval & tender status routes
+Route::get('/ceo/quoted-tenders', [AssignTenderController::class, 'ceoQuotedTenders']);
+Route::post('/ceo/quotation-approval', [AssignTenderController::class, 'ceoQuotationApproval']);
+Route::post('/ceo/tender-award', [AssignTenderController::class, 'markAwarded']);
+Route::post('/tender/mark-submitted', [AssignTenderController::class, 'markSubmitted']);
+
 //tender document route
 Route::resource('/submit/tender', TenderDocSubmissionController::class);
 Route::get('/submitted/tender', [TenderDocSubmissionController::class, 'yourSubmission']);
@@ -193,6 +207,7 @@ Route::get('/count/submitted/tender', [TenderDocSubmissionController::class, 'co
 
 //awarded tenders
 Route::get('/awarded-tender', [AwardedTenderController::class, 'index']);
+Route::get('/awarded-tender/budget-sources', [AwardedTenderController::class, 'budgetSources']);
 Route::get('/count/awarded-tenders', [AwardedTenderController::class, 'countAwardedTenders']);
 
 //projects Routes
@@ -334,13 +349,21 @@ Route::get('/count/project-activities', [ProjectActivitiesController::class, 'co
 Route::get('/count/proj-activity-for-hod', [ProjectActivitiesController::class, 'countUserActivities']);
 Route::get('/count/proj-activities/for-user', [ProjectActivitiesController::class, 'countUserV1Projects']);
 
- //udpdates
+ //udpdates — explicit routes MUST come before resource() to avoid {update} catching them
+Route::get('/updates/heatmap', [ChatController::class, 'heatmap']);
+Route::get('/updates/by-day', [ChatController::class, 'heatmapByDay']);
 Route::resource('/updates', ChatController::class);
 Route::get('/my/updates', [ChatController::class, 'MyChats']);
 Route::get('/count/total-updates', [ChatController::class, 'countAllChats']);
 Route::get('/reports/for-updates', [ChatController::class, 'getChatReports']);
 Route::get('/admin/all-updates', [ChatController::class, 'adminAllUpdates']);
 Route::get('/department-updates', [ChatController::class, 'departmentUpdates']);
+Route::get('/ceo/updates/performance', [ChatController::class, 'ceoPerformanceSummary']);
+Route::get('/ceo/updates/feed', [ChatController::class, 'ceoAllUpdates']);
+Route::get('/ceo/updates/weekly-chart', [ChatController::class, 'ceoWeeklyPerformance']);
+Route::post('/updates/ceo-comment', [ChatController::class, 'addCeoComment']);
+Route::get('/my/notifications', [ChatController::class, 'myNotifications']);
+Route::post('/my/notifications/read', [ChatController::class, 'markNotificationsRead']);
 
 //analyses
 Route::apiResource('/project-analyses', ProjectAnalysisController::class);
@@ -378,17 +401,17 @@ Route::resource('receipts', ReceiptController::class);
     Route::get('/c-dropdown', [ContractController::class, 'getContractTitles']);
 
     // Accountant Invoice Management Routes
-    Route::match(['get', 'options'], '/accountant/invoices', [InvoiceController::class, 'indexAccountant']);
-    Route::match(['post', 'options'], '/accountant/invoices', [InvoiceController::class, 'storeAccountant']);
-    Route::match(['get', 'options'], '/accountant/invoices/{id}', [InvoiceController::class, 'show']);
-    Route::match(['put', 'options'], '/accountant/invoices/{id}', [InvoiceController::class, 'updateAccountant']);
-    Route::match(['delete', 'options'], '/accountant/invoices/{id}', [InvoiceController::class, 'destroyAccountant']);
-    Route::match(['get', 'options'], '/accountant/statistics', [InvoiceController::class, 'statisticsAccountant']);
-    Route::match(['post', 'options'], '/accountant/invoices/{id}/send', [InvoiceController::class, 'sendAccountantInvoice']);
-    Route::match(['post', 'options'], '/accountant/invoices/{id}/mark-paid', [InvoiceController::class, 'markAccountantInvoiceAsPaid']);
-    Route::match(['get', 'options'], '/accountant/invoices/export/excel', [InvoiceController::class, 'exportInvoicesToExcel']);
-    Route::match(['get', 'options'], '/accountant/invoices/export/pdf', [InvoiceController::class, 'exportInvoicesToPDF']);
-    Route::match(['get', 'options'], '/accountant/invoices/{id}/download', [InvoiceController::class, 'downloadInvoice']);
+    Route::get('/accountant/invoices', [InvoiceController::class, 'indexAccountant']);
+    Route::post('/accountant/invoices', [InvoiceController::class, 'storeAccountant']);
+    Route::get('/accountant/invoices/export/excel', [InvoiceController::class, 'exportInvoicesToExcel']);
+    Route::get('/accountant/invoices/export/pdf', [InvoiceController::class, 'exportInvoicesToPDF']);
+    Route::get('/accountant/invoices/{id}/download', [InvoiceController::class, 'downloadInvoice']);
+    Route::post('/accountant/invoices/{id}/send', [InvoiceController::class, 'sendAccountantInvoice']);
+    Route::post('/accountant/invoices/{id}/mark-paid', [InvoiceController::class, 'markAccountantInvoiceAsPaid']);
+    Route::get('/accountant/invoices/{id}', [InvoiceController::class, 'show']);
+    Route::put('/accountant/invoices/{id}', [InvoiceController::class, 'updateAccountant']);
+    Route::delete('/accountant/invoices/{id}', [InvoiceController::class, 'destroyAccountant']);
+    Route::get('/accountant/statistics', [InvoiceController::class, 'statisticsAccountant']);
 
     // Test endpoints (remove in production)
     Route::get('/test/budget', function() {
@@ -517,6 +540,10 @@ Route::resource('receipts', ReceiptController::class);
     Route::delete('leaves/{id}', [\App\Http\Controllers\LeaveController::class, 'destroy']);
     Route::post('leaves/{id}/approve', [\App\Http\Controllers\LeaveController::class, 'approve']);
     Route::post('leaves/{id}/reject', [\App\Http\Controllers\LeaveController::class, 'reject']);
+
+    // Financial Requests (personal requests by employees)
+    Route::get('financial-requests', [\App\Http\Controllers\FinancialRequestController::class, 'index']);
+    Route::post('financial-requests', [\App\Http\Controllers\FinancialRequestController::class, 'store']);
     
     // Test endpoint for debugging
     Route::get('test/auth', function() {
@@ -582,6 +609,12 @@ Route::get('/tera-invites/overview', [TeraInviteController::class, 'overview'])
 
 Route::get('/tera-pos/overview', [TeraPOSController::class, 'overview'])
      ->name('tera-pos.overview');
+
+Route::get('/inventory/overview', [InventoryController::class, 'overview'])
+     ->name('inventory.overview');
+
+Route::get('/vts/dashboard', [VTSController::class, 'dashboard'])
+     ->name('vts.dashboard');
 
 // CEO Financial Records API Routes
 Route::get('/ceo/financial/records', [FinancialRecordsController::class, 'index']);
